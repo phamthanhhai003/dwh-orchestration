@@ -1,0 +1,115 @@
+# SparkApplication TĨNH cho CDC streaming — image baked (spark/Dockerfile.t24). 2026-06-22: ACCOUNT.HIS added via :ss=ACCOUNT override.
+# THÊM BẢNG: sửa danh sách trong spark/manifests/cdc-tables.yaml (ConfigMap t24-cdc-tables) +
+#   thêm bảng vào table.include.list ở kafka/03-mssql-connector.yaml. KHÔNG đụng yaml này.
+# Apply: kubectl apply -f spark/manifests/cdc-tables.yaml && kubectl delete sparkapplication
+#   t24-cob-streaming -n bnctl-spark2-development-ns && kubectl apply -f spark/manifests/t24-cob-streaming.yaml
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: t24-cob-streaming
+  namespace: bnctl-spark2-development-ns
+spec:
+  type: Python
+  mode: cluster
+  image: "congtvjits/spark-t24:v3"
+  imagePullPolicy: IfNotPresent
+  pythonVersion: "3"
+  mainApplicationFile: "local:///opt/jobs/t24_streaming_cdc.py"
+  arguments:
+    - "--bootstrap"
+    - "cdc-kafka-bootstrap.bnctl-kafka-development-ns.svc.cluster.local:9092"
+    - "--ss"
+    - "s3a://spark-scripts/t24/ss_full.json"
+    - "--checkpoint"
+    - "s3a://checkpoint/t24-cob-v3/"
+    - "--dlq"
+    - "s3a://checkpoint/t24-cob-dlq/"
+    - "--trigger"
+    - "15 seconds"
+    - "--keep-lsn-tables"
+    - "BATCH"
+    # Danh sach bang = ConfigMap t24-cdc-tables (sua o spark/manifests/cdc-tables.yaml), mount tai /opt/conf.
+    - "--tables-file"
+    - "/opt/conf/tables.txt"
+  sparkVersion: "3.5.1"
+  volumes:
+    - name: cdc-tables
+      configMap:
+        name: t24-cdc-tables
+  sparkConf:
+    "spark.driver.extraClassPath": "/opt/spark/jars/*"
+    "spark.executor.extraClassPath": "/opt/spark/jars/*"
+    "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions"
+    "spark.sql.catalog.hive": "org.apache.iceberg.spark.SparkCatalog"
+    "spark.sql.catalog.hive.type": "hive"
+    "spark.sql.catalog.hive.uri": "thrift://hive-metastore.bnctl-hive-development-ns.svc.cluster.local:9083"
+    "spark.sql.catalog.hive.warehouse": "s3a://hive-warehouse"
+    "spark.sql.defaultCatalog": "hive"
+    "spark.sql.warehouse.dir": "s3a://hive-warehouse"
+    "spark.sql.catalog.hive.io-impl": "org.apache.iceberg.aws.s3.S3FileIO"
+    "spark.sql.catalog.hive.s3.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.sql.catalog.hive.s3.path-style-access": "true"
+    "spark.sql.catalog.hive.client.region": "us-east-1"
+    # Credentials KHONG hardcode: s3a doc qua EnvironmentVariableCredentialsProvider,
+    # Iceberg S3FileIO doc qua AWS SDK default chain — ca 2 lay env AWS_* (Secret minio-credentials).
+    "spark.hadoop.fs.s3a.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.EnvironmentVariableCredentialsProvider"
+    "spark.hadoop.fs.s3a.path.style.access": "true"
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "spark.sql.shuffle.partitions": "4"
+  driver:
+    cores: 1
+    coreLimit: "1200m"
+    memory: "2g"
+    serviceAccount: spark-sa
+    volumeMounts:
+      - name: cdc-tables
+        mountPath: /opt/conf
+    env:
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_ACCESS_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_REGION
+        value: "us-east-1"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values: ["k8s-bnctl-dw-dev-worker-02"]   # pin: image baked side-loaded vào node này
+  executor:
+    cores: 1
+    instances: 1
+    memory: "2g"
+    env:
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_ACCESS_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_REGION
+        value: "us-east-1"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values: ["k8s-bnctl-dw-dev-worker-02"]   # pin: image baked side-loaded vào node này
+  restartPolicy:
+    type: Never

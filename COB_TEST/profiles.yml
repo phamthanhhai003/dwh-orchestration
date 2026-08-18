@@ -1,0 +1,14 @@
+cob_test:
+  outputs:
+    dev:
+      type: dremio
+      software_host: "{{ env_var('DREMIO_HOST') }}"
+      port: 9047
+      use_ssl: false
+      user: "{{ env_var('DREMIO_USER') }}"
+      password: "{{ env_var('DREMIO_PASSWORD') }}"
+      dremio_space: '@user'
+      object_storage_source: 'hive'
+      schema: 'gold'
+      threads: 1
+  target: dev

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "t24-parser"
+version = "0.1.0"
+description = "Metadata-driven T24 XMLRECORD parser (STANDARD.SELECTION) - shared by CDC streaming and JDBC pull paths"
+requires-python = ">=3.9"
+# pyspark is provided by the Spark runtime image - intentionally NOT a hard dependency
+dependencies = []
+
+[project.optional-dependencies]
+spark = ["pyspark>=3.5,<4"]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "spark: tests that need a SparkSession (run inside the Spark image / on cluster)",
+]

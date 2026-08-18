@@ -1,0 +1,59 @@
+# ============================================================================
+# INTERFACE CHO DEV: danh sach bang CDC streaming dua vao Bronze.
+# >>> QUY TRINH THEM BANG day du: xem spark/manifests/guide_for_dev.md <<<
+#
+# Moi dong tables.txt:  NAME=<kafka_topic>:<bronze_table>
+#   NAME=t24.<db>.<schema>.<TABLE>:hive.bronze.t24_<ten>   ('#'=comment, dong trong bo qua)
+# Sau khi sua:
+#   kubectl apply -f spark/manifests/cdc-tables.yaml
+#   kubectl -n bnctl-spark2-development-ns delete sparkapplication t24-cob-streaming
+#   kubectl apply -f spark/manifests/t24-cob-streaming.yaml
+# Nho: con phai them bang vao table.include.list o kafka/03-mssql-connector.yaml (xem guide).
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+  name: t24-cdc-tables
+  namespace: bnctl-spark2-development-ns
+data:
+  tables.txt: |
+    BATCH=t24.testdb.dbo.F_BATCH:hive.bronze.t24_batch
+    STMT.ENTRY=t24.testdb.dbo.FBNK_STMT_ENTRY:hive.bronze.t24_stmt_entry
+    STMT.ENTRY.DETAIL=t24.testdb.dbo.FBNK_STMT_ENTRY_DETAIL:hive.bronze.t24_stmt_entry_detail
+    CATEG.ENTRY=t24.testdb.dbo.FBNK_CATEG_ENTRY:hive.bronze.t24_categ_entry
+    CATEG.ENTRY.DETAIL=t24.testdb.dbo.FBNK_CATEG_ENTRY_DETAIL:hive.bronze.t24_categ_entry_detail
+    AA.PROCESS.DETAILS=t24.testdb.dbo.FBNK_AA_PROCESS_DETAILS:hive.bronze.t24_aa_process_details
+    ACCT.ACTIVITY=t24.testdb.dbo.FBNK_ACCT_ACTIVITY:hive.bronze.t24_acct_activity
+    ACCOUNT=t24.testdb.dbo.FBNK_ACCOUNT:hive.bronze.t24_account
+    AA.ACTIVITY.HISTORY=t24.testdb.dbo.AAFBNK_AA010:hive.bronze.t24_aa_activity_history
+    AA.ARR.ACCOUNT=t24.testdb.dbo.FBNK_AA_ARR_ACCOUNT:hive.bronze.t24_aa_arr_account
+    AA.BILL.DETAILS=t24.testdb.dbo.FBNK_AA_BILL_DETAILS:hive.bronze.t24_aa_bill_details
+    CUSTOMER=t24.testdb.dbo.FBNK_CUSTOMER:hive.bronze.t24_customer
+    AA.ACCOUNT.DETAILS=t24.testdb.dbo.FBNK_AA_ACCOUNT_DETAILS:hive.bronze.t24_aa_account_details
+    PV.ASSET.DETAIL=t24.testdb.dbo.FBNK_PV_ASSET_DETAIL:hive.bronze.t24_pv_asset_detail
+    ACCOUNT.STATEMENT=t24.testdb.dbo.FBNK_ACCOUNT_STATEMENT:hive.bronze.t24_account_statement
+    AA.ARRANGEMENT=t24.testdb.dbo.FBNK_AA_ARRANGEMENT:hive.bronze.t24_aa_arrangement
+    AA.ARR.BALANCE.MAINTENANCE=t24.testdb.dbo.AAFBNK_AA063:hive.bronze.t24_aa_arr_balance_maintenance
+    AC.LOCKED.EVENTS=t24.testdb.dbo.FBNK_AC_LOCKED_EVENTS:hive.bronze.t24_ac_locked_events
+    FUNDS.TRANSFER=t24.testdb.dbo.FBNK_FUNDS_TRANSFER:hive.bronze.t24_funds_transfer
+    # CATEG.ENT.TODAY: rỗng 0 row → chưa có topic, thêm lại khi có data
+    STMT.ENTRY.DETAIL.XREF=t24.testdb.dbo.ACFBNK_ST002:hive.bronze.t24_stmt_entry_detail_xref
+    CATEG.ENTRY.DETAIL.XREF=t24.testdb.dbo.ACFBNK_CA002:hive.bronze.t24_categ_entry_detail_xref
+    ACCOUNT.HIS=t24.testdb.dbo.FBNK_ACCOUNT_HIS:hive.bronze.t24_account_his:ss=ACCOUNT
+    AA.ARR.PAYMENT.SCHEDULE=t24.testdb.dbo.AAFBNK_AA093:hive.bronze.t24_aa_arr_payment_schedule
+    STMT.PRINTED=t24.testdb.dbo.FBNK_STMT_PRINTED:hive.bronze.t24_stmt_printed
+    ACCT.STMT.PRINT=t24.testdb.dbo.FBNK_ACCT_STMT_PRINT:hive.bronze.t24_acct_stmt_print
+    CUSTOMER.ACCOUNT=t24.testdb.dbo.FBNK_CUSTOMER_ACCOUNT:hive.bronze.t24_customer_account
+    ACCOUNT.CLOSED=t24.testdb.dbo.FBNK_ACCOUNT_CLOSED:hive.bronze.t24_account_closed
+    AA.ARR.TERM.AMOUNT=t24.testdb.dbo.FBNK_AA_ARR_TERM_AMOUNT:hive.bronze.t24_aa_arr_term_amount
+    AA.ARR.CUSTOMER=t24.testdb.dbo.FBNK_AA_ARR_CUSTOMER:hive.bronze.t24_aa_arr_customer
+    EM.LO.APPLICATION=t24.testdb.dbo.FBNK_EM_LO_APPLICATION:hive.bronze.t24_em_lo_application
+    # ACCOUNT.CONCAT=t24.testdb.dbo.F_ACCOUNT_CONCAT:hive.bronze.t24_account_concat  # not in SS — disabled
+    AA.CUSTOMER.ROLE=t24.testdb.dbo.F_AA_CUSTOMER_ROLE:hive.bronze.t24_aa_customer_role
+    AC.SUB.ACCOUNT=t24.testdb.dbo.FBNK_AC_SUB_ACCOUNT:hive.bronze.t24_ac_sub_account
+    TELLER=t24.testdb.dbo.FBNK_TELLER:hive.bronze.t24_teller
+    AC.ACCOUNT.SWEEP.HIST=t24.testdb.dbo.ACFBNK_AC009:hive.bronze.t24_ac_account_sweep_hist
+    ACCT.ENT.TODAY=t24.testdb.dbo.FBNK_ACCT_ENT_TODAY:hive.bronze.t24_acct_ent_today
+    EM.DL.APPLICATION=t24.testdb.dbo.FBNK_EM_DL_APPLICATION:hive.bronze.t24_em_dl_application
+    # HOLD_CONTROL — manifest cho luồng sftp_hold (special case, KHÔNG trong list_table.xlsx)
+    HOLD.CONTROL=t24.testdb.dbo.F_HOLD_CONTROL:hive.bronze.hold_control

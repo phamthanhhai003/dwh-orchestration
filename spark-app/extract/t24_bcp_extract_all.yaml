@@ -1,0 +1,65 @@
+# BCP batch extract — 1 pod, tất cả bảng tuần tự, tránh overhead per-pod.
+# Dùng bởi pull_bulk_dag.py (1 SparkKubernetesOperator thay vì N).
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: "bcp-extract-all-{{ macros.uuid.uuid4().hex[:10] }}"
+  namespace: "{{ var.value.get('SPARK_NAMESPACE', 'bnctl-spark2-development-ns') }}"
+spec:
+  type: Python
+  mode: cluster
+  image: "congtvjits/spark-t24:build-156"
+  imagePullPolicy: IfNotPresent
+  pythonVersion: "3"
+  mainApplicationFile: "local:///opt/jobs/t24_bcp_extract.py"
+  arguments:
+    - "--server"
+    - "mssql.bnctl-kafka-development-ns.svc.cluster.local"
+    - "--database"
+    - "testdb"
+    - "--tables"
+    - "{{ params.tables }}"
+    - "--output-prefix"
+    - "s3a://raw/test_bulk/"
+    - "--date"
+    - "{{ ti.xcom_pull(task_ids='get_business_date', key='business_date') }}"
+  sparkVersion: "3.5.1"
+  volumes:
+    - name: bcp-script
+      configMap:
+        name: t24-bcp-extract-script
+  sparkConf:
+    "spark.driver.extraClassPath": "/opt/spark/jars/*"
+    "spark.executor.extraClassPath": "/opt/spark/jars/*"
+    "spark.hadoop.fs.s3a.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.EnvironmentVariableCredentialsProvider"
+    "spark.hadoop.fs.s3a.path.style.access": "true"
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+  driver:
+    cores: 1
+    coreLimit: "1000m"
+    memory: "2g"
+    serviceAccount: spark-sa
+    volumeMounts:
+      - name: bcp-script
+        mountPath: /opt/jobs/t24_bcp_extract.py
+        subPath: t24_bcp_extract.py
+        readOnly: true
+    env: &env
+      - name: MSSQL_PASSWORD
+        valueFrom: { secretKeyRef: { name: mssql-credentials, key: MSSQL_PASSWORD } }
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom: { secretKeyRef: { name: minio-credentials, key: AWS_ACCESS_KEY_ID } }
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom: { secretKeyRef: { name: minio-credentials, key: AWS_SECRET_ACCESS_KEY } }
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: MINIO_ENDPOINT
+        value: "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+  executor:
+    cores: 1
+    instances: 1
+    memory: "512m"
+    env: *env
+  restartPolicy:
+    type: Never

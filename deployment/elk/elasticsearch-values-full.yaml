@@ -1,0 +1,25 @@
+# chart: elasticsearch 7.17.3
+# repo: https://github.com/elastic/helm-charts
+---
+esJavaOpts: -Xmx1g -Xms1g
+minimumMasterNodes: 1
+persistence:
+  enabled: true
+replicas: 1
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+service:
+  type: ClusterIP
+volumeClaimTemplate:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: longhorn
+

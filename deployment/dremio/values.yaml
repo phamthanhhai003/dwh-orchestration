@@ -1,0 +1,88 @@
+# chart: dremio 3.0.13
+---
+coordinator:
+  extraEnvVars:
+  - name: DREMIO_MAX_HEAP_SIZE_MB
+    value: 4096Mi
+  persistence:
+    size: 5Gi
+    storageClass: longhorn
+  resources:
+    limits:
+      cpu: 2
+      memory: 4096Mi
+    requests:
+      cpu: 1
+      memory: 4096Mi
+defaultInitContainers:
+  defaultImage:
+    repository: bitnamilegacy/os-shell
+dremio:
+  image:
+    repository: bitnamilegacy/dremio
+executor:
+  common:
+    extraEnvVars:
+    - name: DREMIO_MAX_HEAP_SIZE_MB
+      value: 2048Mi
+    persistence:
+      size: 5Gi
+      storageClass: longhorn
+    resources:
+      limits:
+        cpu: 2
+        memory: 4096Mi
+      requests:
+        cpu: 1
+        memory: 2048Mi
+externalS3:
+  accessKeyID: minioadmin
+  accessKeySecret: minio-secret-key-change-me
+  disableCertChecking: true
+  host: minio.bnctl-minio-development-ns.svc.cluster.local
+  path: /dremio
+  port: 9000
+  protocol: http
+ingress:
+  enabled: true
+  hostname: dremio-dwh.bnctl.develop
+  ingressClassName: nginx
+  pathType: Prefix
+  tls: true
+masterCoordinator:
+  extraEnvVars:
+  - name: DREMIO_MAX_HEAP_SIZE_MB
+    value: 4096Mi
+  persistence:
+    size: 10Gi
+    storageClass: longhorn
+  resources:
+    limits:
+      cpu: 2
+      memory: 4096Mi
+    requests:
+      cpu: 1
+      memory: 4096Mi
+minio:
+  enabled: false
+service:
+  nodePorts:
+    client: '31100'
+    flight: '31220'
+    web: '31047'
+  type: NodePort
+zookeeper:
+  image:
+    repository: bitnamilegacy/zookeeper
+    tag: 3.9.3-debian-12-r22
+  persistence:
+    size: 2Gi
+    storageClass: longhorn
+  resources:
+    limits:
+      cpu: 2
+      memory: 1024Mi
+    requests:
+      cpu: 1
+      memory: 512Mi
+

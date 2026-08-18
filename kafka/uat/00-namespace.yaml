@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bnctl-kafka-uat-ns
+  labels:
+    app.kubernetes.io/part-of: bnctl-cdc
+    environment: uat

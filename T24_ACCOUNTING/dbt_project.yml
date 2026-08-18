@@ -1,0 +1,25 @@
+name: 't24_accounting'
+version: '1.0.0'
+config-version: 2
+profile: 't24_accounting'
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+models:
+  t24_accounting:
+    +database: hive
+    staging:
+      +root_path: silver
+      +schema: silver
+      +materialized: table
+    reporting:
+      +root_path: gold
+      +schema: gold
+      +materialized: table
+seeds:
+  t24_accounting:
+    +database: hive
+    +schema: silver
+vars: {business_date: "", target_date: ""}

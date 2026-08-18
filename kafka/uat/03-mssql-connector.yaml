@@ -1,0 +1,43 @@
+# Debezium SQL Server connector (CDC tu MSSQL/T24) - UAT
+# ⚠️ CON PLACEHOLDER <...> — dien thong tin nguon UAT truoc khi apply:
+#   - database.hostname  : IP/hostname MSSQL UAT (PHAI reachable tu trong UAT cluster,
+#                          dai 192.168.45.x hoac dai ma cluster route duoc)
+#   - database.names     : ten database da bat CDC
+#   - table.include.list : danh sach bang schema.table can capture
+#
+# Tren MSSQL nguon truoc khi connect (DBA chay 1 lan):
+#   EXEC sys.sp_cdc_enable_db;
+#   EXEC sys.sp_cdc_enable_table @source_schema=N'dbo', @source_name=N'<bang>', @role_name=NULL;
+#   -- SQL Server Agent PHAI dang chay (CDC capture job).
+#
+# Credentials: KHONG inline o UAT — doc tu Secret mssql-credentials qua FileConfigProvider
+# (xem secret.example.yaml; Secret phai apply TRUOC khi apply file nay).
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnector
+metadata:
+  name: mssql-source-connector
+  namespace: bnctl-kafka-uat-ns
+  labels:
+    strimzi.io/cluster: debezium-connect
+spec:
+  class: io.debezium.connector.sqlserver.SqlServerConnector
+  tasksMax: 1
+  config:
+    # --- Ket noi MSSQL nguon UAT ---
+    database.hostname: "<MSSQL_UAT_HOST>"
+    database.port: 1433
+    database.user: "${file:/opt/kafka/external-configuration/mssql-credentials/mssql.properties:username}"
+    database.password: "${file:/opt/kafka/external-configuration/mssql-credentials/mssql.properties:password}"
+    database.names: "<DB_NAME>"
+    database.encrypt: false            # bat len neu MSSQL UAT yeu cau TLS JDBC
+    # --- Topic & schema history ---
+    topic.prefix: t24                  # topic: t24.<db>.<schema>.<table> (convention v1.4)
+    schema.history.internal.kafka.bootstrap.servers: cdc-kafka-bootstrap:9092
+    schema.history.internal.kafka.topic: schema-changes.t24
+    # --- Snapshot & capture ---
+    # initial = snapshot full roi stream. Neu bang qua lon / khong muon blocking luc
+    # go-live: doi sang snapshot.mode=no_data + incremental snapshot (xem thiet ke prod).
+    snapshot.mode: initial
+    table.include.list: "<dbo.BANG_1,dbo.BANG_2>"
+    tombstones.on.delete: true
+    decimal.handling.mode: double      # tranh byte-encoded decimal kho consume

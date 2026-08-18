@@ -1,0 +1,16 @@
+name: 't24_operational'
+version: '1.0.0'
+config-version: 2
+profile: 't24_operational'
+model-paths: ["models"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+models:
+  t24_operational:
+    +database: hive
+    reporting:
+      +root_path: gold
+      +schema: gold
+      +materialized: table
+vars: {business_date: "", target_date: ""}

@@ -1,0 +1,24 @@
+# chart: jenkins 5.8.93
+# repo: https://www.jenkins.io/
+---
+controller:
+  JCasC:
+    configScripts:
+      security: "jenkins:\n  authorizationStrategy: \"loggedInUsersCanDoAnything\"\
+        \n  securityRealm: \"local\"\n"
+  ingress:
+    enabled: true
+    hostName: jenkins-dwh.bnctl.develop
+    ingressClassName: nginx
+  initContainerEnv:
+  - name: JENKINS_UC_DOWNLOAD
+    value: https://updates.jenkins.io
+  installPlugins: false
+  jenkinsUrl: https://jenkins-dwh.bnctl.develop/
+  nodePort: 31006
+  serviceType: NodePort
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClassName: longhorn
+

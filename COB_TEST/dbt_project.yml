@@ -1,0 +1,10 @@
+name: 'cob_test'
+version: '1.0'
+config-version: 2
+profile: 'cob_test'
+model-paths: ["models"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+models:
+  cob_test:
+    +materialized: table

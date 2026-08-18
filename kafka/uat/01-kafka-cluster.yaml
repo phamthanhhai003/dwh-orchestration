@@ -1,0 +1,96 @@
+# Kafka cluster (KRaft mode) - UAT
+# Topology: 3 controller dedicated + 3 broker, RF=3, min.insync.replicas=2
+#   - Controller CHOT 3 ngay tu dau: Strimzi dung STATIC controller quorum
+#     -> so controller KHONG scale duoc sau (phai rebuild cum).
+#   - 3 broker => du de RF=3 (khac DEV chi co 1 broker RF=1).
+#   - UAT co 5 node, storage class longhorn (default).
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaNodePool
+metadata:
+  name: controller
+  namespace: bnctl-kafka-uat-ns
+  labels:
+    strimzi.io/cluster: cdc
+spec:
+  replicas: 3
+  roles:
+    - controller
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: 5Gi              # controller chi chua metadata log -> nho
+        class: longhorn-kafka   # SC replica=1 (xem 01a-storageclass.yaml)
+        deleteClaim: false
+  resources:                   # controller nhe: khong dung data traffic
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  jvmOptions:
+    "-Xms": 512m
+    "-Xmx": 512m
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaNodePool
+metadata:
+  name: broker
+  namespace: bnctl-kafka-uat-ns
+  labels:
+    strimzi.io/cluster: cdc
+spec:
+  replicas: 3                  # UAT: 3 broker de chay RF=3 nhu prod
+  roles:
+    - broker
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: 20Gi             # broker chua data thuc; tang neu volume CDC lon
+        class: longhorn-kafka   # SC replica=1 (xem 01a-storageclass.yaml)
+        deleteClaim: false
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "1"
+      memory: 4Gi
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: cdc
+  namespace: bnctl-kafka-uat-ns
+  annotations:
+    strimzi.io/node-pools: enabled
+    strimzi.io/kraft: enabled
+spec:
+  kafka:
+    version: 3.9.0
+    metadataVersion: 3.9-IV0
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+    config:
+      # UAT 3 broker => RF=3, minISR=2 (dung thiet ke prod)
+      offsets.topic.replication.factor: 3
+      transaction.state.log.replication.factor: 3
+      transaction.state.log.min.isr: 2
+      default.replication.factor: 3
+      min.insync.replicas: 2
+      log.retention.hours: 168
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}

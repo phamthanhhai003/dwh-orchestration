@@ -1,0 +1,73 @@
+order_id,code,description,line,stt_noline
+1,5.0,EXPENSE:,,
+2,5.01,INTEREST EXPENSE,,1
+3,5.01.2,Interest by Individual Deposits,,2
+4,5.01.2.1,Saving Deposits,18700,
+5,5.01.2.2,Time Deposits,1880,
+6,5.01.2.2,Demand Deposits,1890,
+7,5.01.3,Interest on Legal Entities Deposits,,3
+8,5.01.3.1,Saving Deposits,1920,
+9,5.01.3.2,Time Deposits,1930,
+10,5.01.5,INT. EXP. ON OTHER BORROWINGS,1980,
+11,5.02,NON INTEREST EXPENSE,,4
+12,5.02.3,Foreign Exchanges Losses,2030,
+13,5.02.4,Commission Expense & Transaction Fees,2050,
+14,5.02.5,Other Non Interest Expense,20400,
+15,5.03,OPERATING EXPENSE,,5
+16,5.03.1,Salaries & Benefits,,6
+17,5.03.1.1,Remunerations of Board of Director,2095,
+18,5.03.1.2,Directors Fees and Honoraria,2097,
+19,5.03.1.1,Salaries and Wages,2100,
+20,5.03.1.3,Fringe Benefits - Employee,2110,
+21,5.03.1.5,Contribution to Retirement,2115,
+22,5.03.1.6,Annual Leave,2120,
+23,5.03.1.7,Payment for Over time,2125,
+24,5.03.2,Other Administrative Expense,,7
+25,5.03.2.4.1.10,"Information Tech./Automation Expense",2190,
+26,5.03.2.4.1.15,Communication Expense,2200,
+27,5.03.2.4.1.20,"Power, Light and Water",2210,
+28,5.03.2.4.1.25,Fuel and Lubricants,2220,
+29,5.03.2.4.1.30,Traveling Expenses,2230,
+30,5.03.2.4.1.35,Stationery and Office Supplies,2240,
+31,5.03.2.4.1.40,Representation and Entertainment,2250,
+32,5.03.2.4.1.45,Repairs and Maintenance,2260,
+33,5.03.3,Advertising and Public Relation,2280,
+34,5.03.4,"Audit, Legal & Professional Fees",2310,
+35,5.03.5,Rents,,8
+36,5.03.5.1,Car Rents,2340,
+37,5.03.5,Rents Paid,2350,
+38,5.03.6,Expense on Premises & Fixed Assets,,9
+39,5.03.6.1,Insurance,2380,
+40,5.03.6.3,Building Maintenance,2390,
+41,5.03.7,Depreciation & Amortization,,10
+42,5.03.7.3,Depr. Machinery & Equipment,2420,
+43,5.03.7.4,"Depr. Furniture, Fixture & Equipment",2430,
+44,5.03.7.5,Depr. Vehicles,2440,
+45,5.03.7.6,Depr. Non Physical Assets,2450,
+46,5.03.7.7,Amort. Leasehold Right & Improvement,2460,
+47,5.03.7.8,Amort. Building,2465,
+48,,Amort. Deferred Charges,1920,
+49,5.03.8,Provision,,11
+50,5.03.8.1,Provision for loans losses,2520,
+51,5.03.9,Other Operating Expense,,12
+52,5.03.9.1.1.05,"Security, Janitorial & Messengerial",2540,
+53,5.03.9.1.1.55,Freight and Handling Expenses,2550,
+54,5.03.9.1.1.60,Taxes and Licenses,2560,
+55,5.03.9.1.1.65,Bad-Debts Written Off,2570,
+56,5.03.9.1.1.66,Health Expenses,2580,
+57,5.03.9.1.1.67,Miscellaneous Expenses/Transport,2582,
+58,5.03.9.1.1.69,Miscellaneous Expenses/Staff Uniform,2590,
+59,5.03.9.1.1.70,Miscellaneous Expenses/ Assets,2605,
+60,5.03.9.1.1.84,Miscellaneous Exp/Loan Ext,2685,
+61,,Public Serv. Payment Distrib Cos,2682,
+62,5.03.9.1.1.78,Miscellaneous Expenses/Others,2680,
+63,5.04,EXTRAORDINARY EXPENSE,,13
+64,5.04.1,Losses With disposal of Fixed Assets,2710,
+65,5.04.2,Adjustment for Prior Periods,2720,
+66,5.04.3,Other Extraordinary Expenses,2730,
+67,,TOTAL OPERATING EXPENSES,2800,14
+68,,NET INCOME (LOSS) BEFORE TAX,3000,
+69,5.09,PROVISION FOR INCOME TAX,2770,15
+70,,NET INCOME (LOSS) AFTER TAX,2800,
+71,,Total Expenses in report CRF,3000,
+72,,Profit in CRF,9999,

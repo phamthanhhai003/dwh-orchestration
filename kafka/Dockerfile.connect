@@ -1,0 +1,25 @@
+# Kafka Connect image cho Debezium SQL Server (CDC tu MSSQL)
+# Base: Strimzi Kafka 0.45.0 / Kafka 3.9.0
+# Plugin: debezium-connector-sqlserver 3.4.0.Final
+#
+# Build & push (qua Docker Hub congtvjits, giong flow CICD hien tai):
+#   docker build -f kafka/Dockerfile.connect -t congtvjits/debezium-connect-sqlserver:0.45.0-3.4.0 kafka/
+#   docker push congtvjits/debezium-connect-sqlserver:0.45.0-3.4.0
+#
+# Hoac build bang Kaniko trong cluster (giong dev.Jenkinsfile).
+
+FROM quay.io/strimzi/kafka:0.45.0-kafka-3.9.0
+
+USER root:root
+
+ARG DEBEZIUM_VERSION=3.4.0.Final
+ENV PLUGIN_DIR=/opt/kafka/plugins/debezium-sqlserver
+
+RUN mkdir -p ${PLUGIN_DIR}
+
+ADD https://repo1.maven.org/maven2/io/debezium/debezium-connector-sqlserver/${DEBEZIUM_VERSION}/debezium-connector-sqlserver-${DEBEZIUM_VERSION}-plugin.tar.gz /tmp/debezium-sqlserver.tar.gz
+
+RUN tar -xzf /tmp/debezium-sqlserver.tar.gz -C ${PLUGIN_DIR} --strip-components=1 \
+    && rm -f /tmp/debezium-sqlserver.tar.gz
+
+USER 1001

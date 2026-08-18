@@ -1,0 +1,45 @@
+# Kafka Connect cluster chay Debezium SQL Server plugin - UAT
+# - image: pre-built tu kafka/Dockerfile.connect (plugin bake san, khong can internet
+#          luc runtime, chi can node pull duoc image tu Docker Hub).
+# - Credentials MSSQL doc qua FileConfigProvider tu Secret mssql-credentials
+#   (KHAC DEV: UAT khong inline password trong connector yaml).
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnect
+metadata:
+  name: debezium-connect
+  namespace: bnctl-kafka-uat-ns
+  annotations:
+    strimzi.io/use-connector-resources: "true"
+spec:
+  version: 3.9.0
+  replicas: 1
+  bootstrapServers: cdc-kafka-bootstrap:9092
+  image: congtvjits/debezium-connect-sqlserver:0.45.0-3.4.0
+  config:
+    group.id: debezium-connect
+    offset.storage.topic: connect-offsets
+    config.storage.topic: connect-configs
+    status.storage.topic: connect-status
+    # UAT 3 broker => RF=3 cho cac topic noi bo cua Connect
+    offset.storage.replication.factor: 3
+    config.storage.replication.factor: 3
+    status.storage.replication.factor: 3
+    key.converter: org.apache.kafka.connect.json.JsonConverter
+    value.converter: org.apache.kafka.connect.json.JsonConverter
+    key.converter.schemas.enable: false
+    value.converter.schemas.enable: false
+    # Config provider doc credentials tu file secret duoc mount
+    config.providers: file
+    config.providers.file.class: org.apache.kafka.common.config.provider.FileConfigProvider
+  externalConfiguration:
+    volumes:
+      - name: mssql-credentials
+        secret:
+          secretName: mssql-credentials
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi

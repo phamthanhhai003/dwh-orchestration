@@ -1,0 +1,11 @@
+kubernetes:4383.vb_76fc9d3c4dc
+workflow-aggregator:608.v67378e9d3db_1
+git:5.7.0
+configuration-as-code:2036.v0b_c2de701dcb_
+gitlab-plugin:1.9.7
+credentials:1487.va_d001ede2c31
+ssh-credentials:337.v395d2403ccd4
+credentials-binding:681.vf91669a_32e45
+plain-credentials:182.v468b_97b_9dcb_8
+job-dsl:1.90.1
+kubernetes-cli:1.12.1

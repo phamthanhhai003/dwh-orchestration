@@ -1,0 +1,32 @@
+# chart: minio 5.1.0
+---
+consoleIngress:
+  enabled: true
+  hosts:
+  - minio-dwh.bnctl.develop
+  ingressClassName: nginx
+consoleService:
+  nodePort: 31001
+  type: NodePort
+ingress:
+  enabled: true
+  hosts:
+  - minio-dwh-api.bnctl.develop
+  ingressClassName: nginx
+persistence:
+  size: 20Gi
+  storageClassName: longhorn
+replicas: 2
+resources:
+  limits:
+    cpu: 1024m
+    memory: 2Gi
+  requests:
+    cpu: 512m
+    memory: 1Gi
+rootPassword: minio-secret-key-change-me
+rootUser: minioadmin
+service:
+  nodePort: 31002
+  type: NodePort
+

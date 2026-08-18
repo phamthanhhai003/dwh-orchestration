@@ -1,0 +1,64 @@
+# JDBC parse cho pull_jdbc_dag — clone t24_pull_parse.yaml, đổi input → raw/test_jdbc/, target → hive.test.*.
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: "pull-jdbc-parse-{{ params.slug }}-{{ macros.uuid.uuid4().hex[:10] }}"
+  namespace: "{{ var.value.get('SPARK_NAMESPACE', 'bnctl-spark2-development-ns') }}"
+spec:
+  type: Python
+  mode: cluster
+  image: "congtvjits/spark-t24:build-156"
+  imagePullPolicy: IfNotPresent
+  pythonVersion: "3"
+  mainApplicationFile: "local:///opt/jobs/t24_batch_parse.py"
+  arguments:
+    - "--table"
+    - "{{ params.ss }}"
+    - "--input"
+    - "s3a://raw/test_jdbc/{{ params.mssql }}/{{ ti.xcom_pull(task_ids='get_business_date', key='business_date') }}/"
+    - "--ss"
+    - "s3a://spark-scripts/t24/ss_full.json"
+    - "--target"
+    - "{{ params.bronze }}"
+    - "--business-date"
+    - "{{ ti.xcom_pull(task_ids='get_business_date', key='business_date') }}"
+    - "--dlq"
+    - "s3a://checkpoint/t24-dlq-jdbc/{{ params.mssql }}/{{ ti.xcom_pull(task_ids='get_business_date', key='business_date') }}/"
+  sparkVersion: "3.5.1"
+  sparkConf:
+    "spark.driver.extraClassPath": "/opt/spark/jars/*"
+    "spark.executor.extraClassPath": "/opt/spark/jars/*"
+    "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions"
+    "spark.sql.catalog.hive": "org.apache.iceberg.spark.SparkCatalog"
+    "spark.sql.catalog.hive.type": "hive"
+    "spark.sql.catalog.hive.uri": "thrift://hive-metastore.bnctl-hive-development-ns.svc.cluster.local:9083"
+    "spark.sql.catalog.hive.warehouse": "s3a://hive-warehouse"
+    "spark.sql.defaultCatalog": "hive"
+    "spark.sql.catalog.hive.io-impl": "org.apache.iceberg.aws.s3.S3FileIO"
+    "spark.sql.catalog.hive.client.region": "us-east-1"
+    "spark.sql.catalog.hive.s3.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.sql.catalog.hive.s3.path-style-access": "true"
+    "spark.hadoop.fs.s3a.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.EnvironmentVariableCredentialsProvider"
+    "spark.hadoop.fs.s3a.path.style.access": "true"
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "spark.sql.shuffle.partitions": "4"
+  driver:
+    cores: 1
+    coreLimit: "1000m"
+    memory: "2g"
+    serviceAccount: spark-sa
+    env: &minio_env
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom: { secretKeyRef: { name: minio-credentials, key: AWS_ACCESS_KEY_ID } }
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom: { secretKeyRef: { name: minio-credentials, key: AWS_SECRET_ACCESS_KEY } }
+      - name: AWS_REGION
+        value: "us-east-1"
+  executor:
+    cores: 2
+    instances: 2
+    memory: "4g"
+    env: *minio_env
+  restartPolicy:
+    type: Never

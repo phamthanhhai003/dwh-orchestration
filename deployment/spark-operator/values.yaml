@@ -1,0 +1,6 @@
+# chart: spark-operator 2.5.0
+---
+spark:
+  jobNamespaces:
+  - bnctl-spark2-development-ns
+

@@ -1,0 +1,64 @@
+# PULL demo — chặng EXTRACT: JDBC dbo.<table> → raw parquet (s3a://raw/t24/<table>/<D>/).
+# Generic per-bảng: dùng bởi dags/pull_cob_dag.py (file-yaml). Bảng qua params.{mssql,slug};
+# D qua xcom (get_business_date). KHÔNG dùng make_app.
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: "pull-cob-extract-{{ params.slug }}-{{ macros.uuid.uuid4().hex[:10] }}"
+  namespace: "{{ var.value.get('SPARK_NAMESPACE', 'bnctl-spark2-development-ns') }}"
+spec:
+  type: Python
+  mode: cluster
+  image: "congtvjits/spark-t24:v4"
+  imagePullPolicy: IfNotPresent
+  pythonVersion: "3"
+  mainApplicationFile: "local:///opt/jobs/t24_jdbc_extract.py"
+  arguments:
+    - "--url"
+    - "jdbc:sqlserver://mssql.bnctl-kafka-development-ns.svc.cluster.local:1433;databaseName=testdb;encrypt=false"
+    - "--dbtable"
+    - "dbo.{{ params.mssql }}"
+    - "--user"
+    - "sa"
+    - "--output"
+    - "s3a://raw/t24/{{ params.mssql }}/{{ ti.xcom_pull(task_ids='get_business_date', key='business_date') }}/"
+    - "--mode"
+    - "full"
+  sparkVersion: "3.5.1"
+  sparkConf:
+    "spark.driver.extraClassPath": "/opt/spark/jars/*"
+    "spark.executor.extraClassPath": "/opt/spark/jars/*"
+    "spark.hadoop.fs.s3a.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.EnvironmentVariableCredentialsProvider"
+    "spark.hadoop.fs.s3a.path.style.access": "true"
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+  driver:
+    cores: 1
+    coreLimit: "1000m"
+    memory: "512m"        # right-size reference 10-row → 3 extract fan-out vừa worker-02
+    serviceAccount: spark-sa
+    env: &mssql_minio_env
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom: { secretKeyRef: { name: minio-credentials, key: AWS_ACCESS_KEY_ID } }
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom: { secretKeyRef: { name: minio-credentials, key: AWS_SECRET_ACCESS_KEY } }
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: MSSQL_PASSWORD
+        valueFrom: { secretKeyRef: { name: mssql-credentials, key: MSSQL_PASSWORD } }
+    affinity: &worker02
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values: ["k8s-bnctl-dw-dev-worker-02"]
+  executor:
+    cores: 1
+    instances: 1
+    memory: "512m"       # right-size reference nhỏ (xem driver)
+    env: *mssql_minio_env
+    affinity: *worker02
+  restartPolicy:
+    type: Never

@@ -1,0 +1,101 @@
+# PULL — chặng PARSE (TEMPLATE): raw parquet -> parser -> Bronze. Chạy SAU khi extract COMPLETED.
+# ĐỪNG apply file template này trực tiếp. THÊM BẢNG = COPY thành t24-parse-<ten>.yaml, sửa:
+#   metadata.name (t24-parse-<ten>), --table (tên SS), --input (= --output của extract), --target (bronze).
+# (ví dụ đang để FUNDS.TRANSFER -> t24_ft_pull). Chạy file copy:
+#   kubectl apply -f spark/manifests/t24-parse-<ten>.yaml
+# Xem spark/manifests/guide_for_dev.md mục PULL.
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: t24-parse-ft
+  namespace: bnctl-spark2-development-ns
+spec:
+  type: Python
+  mode: cluster
+  image: "congtvjits/spark-t24:v3"
+  imagePullPolicy: IfNotPresent
+  pythonVersion: "3"
+  mainApplicationFile: "local:///opt/jobs/t24_batch_parse.py"
+  arguments:
+    - "--table"
+    - "FUNDS.TRANSFER"
+    - "--input"
+    - "s3a://raw/t24/FBNK_FUNDS_TRANSFER/2026-06-13/"
+    - "--ss"
+    - "s3a://spark-scripts/t24/ss_full.json"
+    - "--target"
+    - "hive.bronze.t24_ft_pull"
+  sparkVersion: "3.5.1"
+  sparkConf:
+    "spark.driver.extraClassPath": "/opt/spark/jars/*"
+    "spark.executor.extraClassPath": "/opt/spark/jars/*"
+    "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions"
+    "spark.sql.catalog.hive": "org.apache.iceberg.spark.SparkCatalog"
+    "spark.sql.catalog.hive.type": "hive"
+    "spark.sql.catalog.hive.uri": "thrift://hive-metastore.bnctl-hive-development-ns.svc.cluster.local:9083"
+    "spark.sql.catalog.hive.warehouse": "s3a://hive-warehouse"
+    "spark.sql.defaultCatalog": "hive"
+    "spark.sql.catalog.hive.io-impl": "org.apache.iceberg.aws.s3.S3FileIO"
+    "spark.sql.catalog.hive.client.region": "us-east-1"
+    "spark.sql.catalog.hive.s3.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.sql.catalog.hive.s3.path-style-access": "true"
+    # Credentials KHONG hardcode: s3a doc qua EnvironmentVariableCredentialsProvider,
+    # Iceberg S3FileIO doc qua AWS SDK default chain — ca 2 lay env AWS_* (Secret minio-credentials).
+    "spark.hadoop.fs.s3a.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.EnvironmentVariableCredentialsProvider"
+    "spark.hadoop.fs.s3a.path.style.access": "true"
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "spark.sql.shuffle.partitions": "4"
+  driver:
+    cores: 1
+    coreLimit: "1200m"
+    memory: "1g"
+    serviceAccount: spark-sa
+    env:
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_ACCESS_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_REGION
+        value: "us-east-1"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values: ["k8s-bnctl-dw-dev-worker-02"]
+  executor:
+    cores: 1
+    instances: 1
+    memory: "1g"
+    env:
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_ACCESS_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_REGION
+        value: "us-east-1"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values: ["k8s-bnctl-dw-dev-worker-02"]
+  restartPolicy:
+    type: Never

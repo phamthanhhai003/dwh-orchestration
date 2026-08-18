@@ -1,0 +1,97 @@
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: treasury-remittance-sync-spark-job
+  namespace: "{{ var.value.get('SPARK_NAMESPACE', 'bnctl-spark2-development-ns') }}"
+
+spec:
+  type: Python
+  mode: cluster
+  image: "haiptjits/spark-3.5.1:v2"
+  imagePullPolicy: IfNotPresent
+  pythonVersion: "3"
+  mainApplicationFile: "s3a://spark-scripts/treasury_remittance_sync_spark.py"
+  sparkVersion: "3.5.1"
+
+  sparkConf:
+    # JARS CONFIG
+    "spark.driver.extraClassPath": "/opt/spark/jars/*"
+    "spark.executor.extraClassPath": "/opt/spark/jars/*"
+
+    # HADOOP MINIO CONFIG (dùng s3a để đọc mainApplicationFile từ MinIO)
+    "spark.hadoop.fs.s3a.endpoint": "{{ conn.minio_conn.extra_dejson.endpoint_url }}"
+    "spark.hadoop.fs.s3a.access.key": "{{ conn.minio_conn.login }}"
+    "spark.hadoop.fs.s3a.secret.key": "{{ conn.minio_conn.password }}"
+    "spark.hadoop.fs.s3a.path.style.access": "true"
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+
+  driver:
+    cores: {{ var.value.get('SPARK_TREASURY_REMITTANCE_SYNC_DRIVER_CORES') | int }}
+    coreRequest: "{{ var.value.get('SPARK_TREASURY_REMITTANCE_SYNC_DRIVER_CORE_REQUEST') }}"
+    coreLimit: "{{ var.value.get('SPARK_TREASURY_REMITTANCE_SYNC_DRIVER_CORE_LIMIT') }}"
+    memory: "{{ var.value.get('SPARK_TREASURY_REMITTANCE_SYNC_DRIVER_MEMORY') }}"
+    serviceAccount: spark-sa
+    env:
+      - name: SFTP_HOST
+        value: "{{ var.value.SFTP_HOST }}"
+      - name: SFTP_PORT
+        value: "22"
+      - name: SFTP_USER
+        value: "{{ var.value.SFTP_USER }}"
+      - name: SFTP_PASS
+        value: "{{ var.value.SFTP_PASS }}"
+      - name: REMOTE_DIR
+        value: "{{ var.value.SFTP_REMOTE_DIR_TREASURY }}"
+      - name: BUCKET_NAME
+        value: "{{ var.value.BUCKET_NAME }}"
+      - name: MINIO_ENDPOINT
+        value: "{{ conn.minio_conn.extra_dejson.endpoint_url }}"
+      - name: MINIO_ACCESS_KEY
+        value: "{{ conn.minio_conn.login }}"
+      - name: MINIO_SECRET_KEY
+        value: "{{ conn.minio_conn.password }}"
+      - name: MINIO_PREFIX
+        value: "treasury"
+      - name: START_DATE
+        value: "{{ dag_run.conf.get('START_DATE', ds) }}"
+      - name: END_DATE
+        value: "{{ dag_run.conf.get('END_DATE', ds) }}"
+      - name: SPARK_EXECUTOR_INSTANCES
+        value: "{{ var.value.get('SPARK_TREASURY_REMITTANCE_SYNC_EXECUTOR_INSTANCES') }}"
+
+  executor:
+    cores: {{ var.value.get('SPARK_TREASURY_REMITTANCE_SYNC_EXECUTOR_CORES') | int }}
+    coreRequest: "{{ var.value.get('SPARK_TREASURY_REMITTANCE_SYNC_EXECUTOR_CORE_REQUEST') }}"
+    coreLimit: "{{ var.value.get('SPARK_TREASURY_REMITTANCE_SYNC_EXECUTOR_CORE_LIMIT') }}"
+    instances: {{ var.value.get('SPARK_TREASURY_REMITTANCE_SYNC_EXECUTOR_INSTANCES') | int }}
+    memory: "{{ var.value.get('SPARK_TREASURY_REMITTANCE_SYNC_EXECUTOR_MEMORY') }}"
+    env:
+      - name: SFTP_HOST
+        value: "{{ var.value.SFTP_HOST }}"
+      - name: SFTP_PORT
+        value: "22"
+      - name: SFTP_USER
+        value: "{{ var.value.SFTP_USER }}"
+      - name: SFTP_PASS
+        value: "{{ var.value.SFTP_PASS }}"
+      - name: REMOTE_DIR
+        value: "{{ var.value.SFTP_REMOTE_DIR_TREASURY }}"
+      - name: BUCKET_NAME
+        value: "{{ var.value.BUCKET_NAME }}"
+      - name: MINIO_ENDPOINT
+        value: "{{ conn.minio_conn.extra_dejson.endpoint_url }}"
+      - name: MINIO_ACCESS_KEY
+        value: "{{ conn.minio_conn.login }}"
+      - name: MINIO_SECRET_KEY
+        value: "{{ conn.minio_conn.password }}"
+      - name: MINIO_PREFIX
+        value: "treasury"
+      - name: START_DATE
+        value: "{{ dag_run.conf.get('START_DATE', ds) }}"
+      - name: END_DATE
+        value: "{{ dag_run.conf.get('END_DATE', ds) }}"
+      - name: SPARK_EXECUTOR_INSTANCES
+        value: "{{ var.value.get('SPARK_TREASURY_REMITTANCE_SYNC_EXECUTOR_INSTANCES') }}"
+
+  restartPolicy:
+    type: Never

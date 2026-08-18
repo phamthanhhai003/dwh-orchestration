@@ -1,0 +1,106 @@
+# PULL — chặng EXTRACT (TEMPLATE): JDBC <bảng T24> -> raw parquet (s3a://raw/...). Batch theo lần.
+# ĐỪNG apply file template này trực tiếp. THÊM BẢNG = COPY thành t24-extract-<ten>.yaml, sửa:
+#   metadata.name (t24-extract-<ten>), --dbtable, --output, --mode (full|incremental).
+#   incremental: thêm "--watermark-col" + "--last-value" vào arguments.
+# (ví dụ đang để FBNK_FUNDS_TRANSFER). Chạy file copy:
+#   kubectl apply -f spark/manifests/t24-extract-<ten>.yaml   (chờ COMPLETED rồi chạy parse)
+# Xem spark/manifests/guide_for_dev.md mục PULL.
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: t24-extract-ft
+  namespace: bnctl-spark2-development-ns
+spec:
+  type: Python
+  mode: cluster
+  image: "congtvjits/spark-t24:v3"
+  imagePullPolicy: IfNotPresent
+  pythonVersion: "3"
+  mainApplicationFile: "local:///opt/jobs/t24_jdbc_extract.py"
+  arguments:
+    - "--url"
+    - "jdbc:sqlserver://mssql.bnctl-kafka-development-ns.svc.cluster.local:1433;databaseName=testdb;encrypt=false"
+    - "--dbtable"
+    - "dbo.FBNK_FUNDS_TRANSFER"
+    - "--user"
+    - "sa"
+    # --password KHONG truyen o day; job doc tu env MSSQL_PASSWORD (Secret mssql-credentials).
+    - "--output"
+    - "s3a://raw/t24/FBNK_FUNDS_TRANSFER/2026-06-13/"
+    # MODE (ban yaml-only nay chi chay duoc 'full'):
+    - "--mode"
+    - "full"                          # keo ca bang (nho / reference / mutable nhu ACCOUNT/CUSTOMER)
+    #
+    # incremental (bang lon append-only: FT, STMT.ENTRY...) — DUONG CHUAN CHUA WIRE:
+    #   last_watermark phai LAY TU bang state etl_pull_watermark (COB-driven checkpoint),
+    #   KHONG go tay. Luong dung: doc last_watermark -> WHERE RECID > last_watermark
+    #   -> sau khi reconcile OK ghi de last_watermark = max(RECID) moi. Thuoc phan DAG da GAC LAI.
+    #   Chay tay TAM (debug) thi them: --mode incremental --watermark-col RECID --last-value <gia_tri>.
+    #   (watermark = RECID vi bang T24-DB chi co RECID,XMLRECORD; cot ngay nam trong XML khong WHERE duoc.)
+  sparkVersion: "3.5.1"
+  sparkConf:
+    "spark.driver.extraClassPath": "/opt/spark/jars/*"
+    "spark.executor.extraClassPath": "/opt/spark/jars/*"
+    # Credentials KHONG hardcode: s3a doc qua EnvironmentVariableCredentialsProvider (env AWS_*).
+    "spark.hadoop.fs.s3a.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.EnvironmentVariableCredentialsProvider"
+    "spark.hadoop.fs.s3a.path.style.access": "true"
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+  driver:
+    cores: 1
+    coreLimit: "1200m"
+    memory: "1g"
+    serviceAccount: spark-sa
+    env:
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_ACCESS_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: MSSQL_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: mssql-credentials
+            key: MSSQL_PASSWORD
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values: ["k8s-bnctl-dw-dev-worker-02"]
+  executor:
+    cores: 1
+    instances: 1
+    memory: "1g"
+    env:
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_ACCESS_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: minio-credentials
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_REGION
+        value: "us-east-1"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values: ["k8s-bnctl-dw-dev-worker-02"]
+  restartPolicy:
+    type: Never

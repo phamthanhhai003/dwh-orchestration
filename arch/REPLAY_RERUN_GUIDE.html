@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hướng dẫn Re-run / Replay pipeline COB (business_date override)</title>
+<style>
+  :root{
+    --bg:#0f1419; --panel:#1a2029; --panel2:#222b36; --border:#2e3a47;
+    --fg:#d6dde6; --muted:#8b97a5; --accent:#4ea1ff; --green:#3fb950;
+    --amber:#d29922; --red:#f85149; --code:#79c0ff; --pill:#1f6feb33;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 22px 80px;}
+  h1{font-size:27px;margin:0 0 6px;color:#fff;letter-spacing:-.3px}
+  h2{font-size:20px;margin:42px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);color:#fff}
+  h3{font-size:16px;margin:26px 0 8px;color:var(--accent)}
+  .sub{color:var(--muted);margin:0 0 4px}
+  p{margin:10px 0}
+  code{background:var(--panel2);color:var(--code);padding:1.5px 6px;border-radius:4px;
+    font-family:"SF Mono",ui-monospace,"Cascadia Code",Consolas,monospace;font-size:13px}
+  pre{background:#0b0f14;border:1px solid var(--border);border-radius:8px;padding:14px 16px;
+    overflow-x:auto;margin:12px 0}
+  pre code{background:none;color:#c9d6e3;padding:0;font-size:13px;line-height:1.55}
+  .cmt{color:#6e7d8c}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:#fff;font-weight:600}
+  tr:nth-child(even) td{background:#161c24}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin:14px 0}
+  .note{border-left:4px solid var(--accent);background:#15202c}
+  .warn{border-left:4px solid var(--amber);background:#241f12}
+  .danger{border-left:4px solid var(--red);background:#2a1414}
+  .ok{color:var(--green);font-weight:600}
+  .no{color:var(--red);font-weight:600}
+  .keep{color:var(--amber);font-weight:600}
+  .pill{display:inline-block;background:var(--pill);color:var(--accent);border:1px solid #1f6feb55;
+    padding:1px 9px;border-radius:20px;font-size:12px;margin-right:4px}
+  .tag-ing{background:#1f6feb22;color:#79c0ff;border:1px solid #1f6feb55}
+  .tag-bld{background:#3fb95022;color:#56d364;border:1px solid #3fb95055}
+  .tag-dbt{background:#d2992222;color:#e3b341;border:1px solid #d2992255}
+  .pill2{display:inline-block;padding:1px 9px;border-radius:20px;font-size:12px}
+  .muted{color:var(--muted)}
+  ul{margin:8px 0;padding-left:22px}
+  li{margin:4px 0}
+  .kbd{font-family:ui-monospace,monospace;background:#0b0f14;border:1px solid var(--border);
+    border-bottom-width:2px;border-radius:5px;padding:1px 7px;font-size:12.5px;color:#c9d6e3}
+  .toc a{color:var(--accent);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  footer{margin-top:50px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--border);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Re-run / Replay pipeline COB — <code>business_date</code> override</h1>
+<p class="sub">Hướng dẫn cho team · DWH BNCTL · cập nhật 2026-06-26</p>
+
+<div class="panel note">
+<b>TL;DR.</b> Mọi DAG trong pipeline COB giờ chạy lại được 1 ngày bất kỳ bằng:
+<pre><code>airflow dags trigger &lt;dag_id&gt; -c '{"business_date":"2026-06-25"}'</code></pre>
+Khi có <code>business_date</code> trong conf, DAG <b>bỏ qua marker COB (F_BATCH)</b> + <b>bỏ guard idempotent</b> (ép chạy lại), nhưng <b>vẫn giữ gate dependency upstream</b>. Log &amp; bronze của ngày đó được <b>ghi đè (upsert / overwrite-partition)</b> — KHÔNG nhân bản.
+</div>
+
+<h2>Mục lục</h2>
+<div class="toc">
+<ul>
+<li><a href="#how">1. Cơ chế hoạt động</a></li>
+<li><a href="#matrix">2. Bảng tổng hợp toàn bộ DAG</a></li>
+<li><a href="#log">3. Tác động lên bảng log</a></li>
+<li><a href="#detail">4. Chi tiết &amp; ý nghĩa từng DAG</a></li>
+<li><a href="#warn">5. Cảnh báo quan trọng</a></li>
+<li><a href="#order">6. Thứ tự replay đúng</a></li>
+<li><a href="#faq">7. FAQ</a></li>
+</ul>
+</div>
+
+<h2 id="how">1. Cơ chế hoạt động</h2>
+<p>Tất cả gom về 1 helper chung <code>lib/cob_marker.conf_override(ctx)</code>:</p>
+<pre><code>d, lcob = cob_marker.conf_override(ctx)   <span class="cmt"># đọc dag_run.conf</span>
+forced  = d is not None                  <span class="cmt"># có business_date ⇒ chế độ replay</span></code></pre>
+<ul>
+<li><b>Không có conf</b> → chạy bình thường: đọc marker COB <code>cob_marker.cob_done()</code> (từ <code>hive.bronze.t24_batch</code> = F_BATCH), idempotent skip nếu ngày đó đã xong.</li>
+<li><b>Có <code>business_date</code></b> → <code>forced=True</code>: lấy date thẳng từ conf, <span class="no">KHÔNG đọc F_BATCH</span>, <span class="no">bỏ guard idempotent</span> để ép chạy lại.</li>
+<li>Tùy chọn <code>l_cob</code> (chỉ <code>cob_gate</code> dùng) — mặc định <code>"0"</code>.</li>
+</ul>
+<div class="panel warn">
+<b>Quan trọng:</b> <code>forced</code> chỉ bỏ <b>guard idempotent</b> ("đã làm rồi thì thôi"). Nó <b>KHÔNG</b> bỏ <b>gate dependency</b> ("upstream phải xong trước"). Vd <code>build_mart</code>/<code>dbt_*</code> vẫn chờ nguồn của ngày D sealed đủ.
+</div>
+
+<h2 id="matrix">2. Bảng tổng hợp toàn bộ DAG</h2>
+<table>
+<tr><th>Tầng</th><th>dag_id</th><th><code>forced</code> bỏ qua</th><th>Vẫn giữ (gate)</th><th>Replay trung thực state D?</th></tr>
+<tr><td rowspan="5"><span class="pill2 tag-ing">INGEST</span></td>
+    <td><code>cob_gate</code></td><td>all_sealed (+ <code>l_cob="0"</code>)</td><td>wait_caught_up</td><td><span class="no">✗ re-pin snapshot về "now"</span></td></tr>
+<tr><td><code>pull_cob</code></td><td>all_sealed</td><td>—</td><td><span class="ok">✓ đè partition business_date=D</span></td></tr>
+<tr><td><code>sftp_hold</code></td><td>all_sealed</td><td>caught_up</td><td><span class="ok">✓ đè partition business_date=D</span></td></tr>
+<tr><td><code>pull_jdbc</code></td><td>all_sealed</td><td>—</td><td><span class="ok">✓ đè partition business_date=D</span></td></tr>
+<tr><td><code>pull_bulk</code></td><td>all_sealed</td><td>—</td><td><span class="ok">✓ đè partition business_date=D</span></td></tr>
+<tr><td rowspan="1"><span class="pill2 tag-bld">BUILD</span></td>
+    <td><code>build_mart</code></td><td>all_enqs_built <span class="muted">(gate + prepare_vars)</span></td><td>all_sealed(upstream)</td><td><span class="ok">✓ đọc snapshot pinned cho D</span></td></tr>
+<tr><td rowspan="5"><span class="pill2 tag-dbt">DBT</span></td>
+    <td><code>dbt_demo</code></td><td rowspan="5">is_model_built <span class="muted">(detect_d + skip_if_built)</span></td><td rowspan="5">wait_gate</td><td rowspan="5"><span class="ok">✓ đọc snapshot pinned cho D</span></td></tr>
+<tr><td><code>dbt_operational</code></td></tr>
+<tr><td><code>dbt_aml</code></td></tr>
+<tr><td><code>dbt_credit</code></td></tr>
+<tr><td><code>dbt_treasury</code></td></tr>
+</table>
+<p class="muted">5 DAG <code>dbt_*</code> do cùng 1 factory <code>dbt_model_cob_dag.py</code> sinh ra → 1 lần sửa, cả 5 đều có override.</p>
+
+<h2 id="log">3. Tác động lên bảng log</h2>
+<p>Override <b>chỉ đổi giá trị <code>business_date</code></b> mà DAG dùng; mọi hàm ghi log chạy như thường và đều <b>UPSERT</b> (ON CONFLICT DO UPDATE) theo khóa chứa <code>business_date</code> → <b>ghi đè đúng row của ngày đó, không tạo dòng thừa</b>.</p>
+<table>
+<tr><th>Bảng</th><th>Khóa (PK)</th><th>Khi replay cùng D</th></tr>
+<tr><td><code>etl_control</code></td><td><code>(business_date, source_table)</code></td><td><code>open_pending</code>→<code>pending</code>, <code>seal</code>→<code>sealed</code> + refresh <code>expected/actual/snapshot_id</code></td></tr>
+<tr><td><code>etl_model_runs</code></td><td><code>(domain, enq_name, layer, business_date)</code></td><td>running→<code>built</code>, refresh <code>models_built/dbt_invocation_id</code></td></tr>
+<tr><td><code>etl_ingest_logs</code></td><td><code>(source_name, flow, business_date)</code></td><td><code>is_sync/is_parsed=true</code>, timestamp mới</td></tr>
+</table>
+<div class="panel note">
+<b>Đồng bộ log ↔ data:</b> bronze ghi bằng <code>overwritePartitions</code> (đè partition <code>business_date=D</code>) → khớp với log upsert. Các ngày khác <b>không</b> bị đụng. Đây là "replay sạch 1 ngày".
+</div>
+
+<h2 id="detail">4. Chi tiết &amp; ý nghĩa từng DAG</h2>
+
+<h3><span class="pill2 tag-ing">INGEST</span> cob_gate <span class="muted">— CDC gate + pin snapshot + seal(flow=cdc)</span></h3>
+<ul>
+<li><b>Làm gì:</b> mở pending cho mọi bảng CDC, chờ stream caught-up tới <code>l_cob</code>, ghim snapshot từng bảng → seal.</li>
+<li><b>Replay:</b> bỏ đọc F_BATCH; <code>l_cob="0"</code> ⇒ <code>wait_caught_up</code> qua ngay (no-op); <code>pin_and_seal</code> ghim <code>latest_snapshot_id</code> = <b>snapshot HIỆN TẠI</b>.</li>
+<li><b class="no">Lưu ý:</b> bảng CDC là MERGE-by-RECID (state hiện tại), nên replay 1 ngày cũ sẽ <b>re-pin về "now"</b> → downstream đọc state hiện tại, KHÔNG phải state lúc D. Hợp để <i>khơi thông luồng / debug</i>; KHÔNG hợp để <i>tái dựng lịch sử trung thực</i>.</li>
+</ul>
+
+<h3><span class="pill2 tag-ing">INGEST</span> pull_cob / pull_jdbc / pull_bulk <span class="muted">— pull bảng T24 → bronze t24_* + seal(flow=pull)</span></h3>
+<ul>
+<li><b>Làm gì:</b> extract (BCP/JDBC) → parse → bronze stamp <code>business_date=D</code> → seal per-bảng.</li>
+<li><b>Replay:</b> bỏ F_BATCH + bỏ <code>all_sealed</code> → extract + parse + seal lại mọi bảng cho D.</li>
+<li><b class="ok">Trung thực:</b> bronze partition theo <code>business_date</code> ⇒ đè đúng ngày, sạch. <code>pull_cob</code> = luồng production; <code>pull_jdbc/pull_bulk</code> = biến thể/recovery.</li>
+</ul>
+
+<h3><span class="pill2 tag-ing">INGEST</span> sftp_hold <span class="muted">— CRF/CRB/CRC từ HOLD (manifest CDC) → bronze + seal(flow=sftp)</span></h3>
+<ul>
+<li><b>Làm gì:</b> query manifest <code>hold_control</code> cho D → fetch đúng RECID → parse per-report (5 report) → bronze → seal.</li>
+<li><b>Replay:</b> bỏ F_BATCH + bỏ <code>all_sealed</code>; <code>caught_up</code> (lag HOLD_CONTROL) vẫn giữ.</li>
+<li><b class="ok">Trung thực:</b> partition <code>business_date=D</code>, đè đúng ngày.</li>
+</ul>
+
+<h3><span class="pill2 tag-bld">BUILD</span> build_mart <span class="muted">— silver fan-out 10 ENQ → hive.silver.t24_*</span></h3>
+<ul>
+<li><b>Làm gì:</b> với mỗi ENQ: đọc <code>snap_&lt;dim&gt;</code> từ <code>sealed_snapshots</code> (pinned cho D) + dates → <code>dbt run</code> silver → mark built.</li>
+<li><b>Replay:</b> bỏ <code>all_enqs_built</code> ở <b>cả gate lẫn</b> <code>prepare_vars</code> (guard thứ 2); <b>giữ</b> gate <code>all_sealed(ALL_SOURCES)</code>.</li>
+<li><b class="ok">Trung thực:</b> đọc <b>snapshot pinned cho D</b> (không phải latest) + filter <code>business_date=D/booking_date=D</code> ⇒ dựng lại đúng state D. <i>Đây là DAG replay "đẹp" nhất.</i></li>
+<li><b class="keep">Điều kiện:</b> seal của <code>cob_gate</code> cho D phải còn nguyên (đừng replay <code>cob_gate</code> kèm, kẻo re-pin về now).</li>
+</ul>
+
+<h3><span class="pill2 tag-dbt">DBT</span> dbt_demo / dbt_operational / dbt_aml / dbt_credit / dbt_treasury <span class="muted">— gold per-division</span></h3>
+<ul>
+<li><b>Làm gì:</b> chờ gate (silver: <code>all_enqs_built</code> + <code>all_sealed(direct_bronze)</code> · bronze/demo: <code>all_sealed(cdc+pull+sftp)</code>) → <code>dbt run --full-refresh</code> gold → mark built.</li>
+<li><b>Replay:</b> bỏ <code>is_model_built</code> ở <b>cả <code>_detect_d</code> lẫn</b> <code>skip_if_built</code> (guard thứ 2); <b>giữ</b> <code>wait_gate</code>.</li>
+<li><b class="ok">Trung thực:</b> đọc snapshot pinned cho D.</li>
+</ul>
+
+<h2 id="warn">5. Cảnh báo quan trọng</h2>
+<div class="panel danger">
+<b>1. Ngày anh truyền = ngày bị seal/ghi đè.</b> Gõ nhầm <code>business_date</code> → nó seal/đè bronze + log dưới ngày sai đó. Đây là điểm DUY NHẤT phải cẩn thận.
+</div>
+<div class="panel danger">
+<b>2. Đừng replay <code>cob_gate</code> nếu cần state lịch sử trung thực.</b> Nó re-pin snapshot CDC về "now". Nếu chỉ muốn dựng lại silver/gold của D → replay thẳng <code>build_mart</code>/<code>dbt_*</code> (chúng đọc snapshot ĐÃ pinned cho D), giữ nguyên seal cob_gate cũ.
+</div>
+<div class="panel warn">
+<b>3. Gate vẫn chặn.</b> Replay <code>dbt_credit</code> mà silver/nguồn của D chưa sealed → <code>wait_gate</code> sẽ chờ (reschedule), không build bừa. Phải replay upstream trước.
+</div>
+
+<h2 id="order">6. Thứ tự replay đúng</h2>
+<pre><code>cob_gate  →  pull_cob / sftp_hold / pull_*  →  build_mart  →  dbt_&lt;division&gt;
+(CDC seal)      (pull/sftp seal)               (silver)        (gold)</code></pre>
+<ul>
+<li>Nếu upstream của D <b>đã sealed sẵn</b> (debug thường gặp) → trigger thẳng tầng cần, gate qua ngay.</li>
+<li>Muốn dựng lại <b>nguyên 1 division cho D</b> mà nguồn còn nguyên: <code>build_mart</code> → <code>dbt_&lt;division&gt;</code> là đủ.</li>
+</ul>
+
+<h3>Ví dụ thực tế</h3>
+<pre><code><span class="cmt"># Chỉ dựng lại gold credit cho 2026-06-25 (silver đã có):</span>
+airflow dags trigger dbt_credit -c '{"business_date":"2026-06-25"}'
+
+<span class="cmt"># Dựng lại silver + gold treasury cho 2026-06-25:</span>
+airflow dags trigger build_mart   -c '{"business_date":"2026-06-25"}'
+<span class="cmt"># (chờ build_mart xong) →</span>
+airflow dags trigger dbt_treasury -c '{"business_date":"2026-06-25"}'
+
+<span class="cmt"># Chạy lại toàn bộ ingest sftp cho 2026-06-25:</span>
+airflow dags trigger sftp_hold -c '{"business_date":"2026-06-25"}'</code></pre>
+
+<h2 id="faq">7. FAQ</h2>
+<p><b>Q. Chạy lại có tạo dòng log trùng không?</b><br>
+Không. Mọi log UPSERT theo khóa có <code>business_date</code> → ghi đè row của ngày đó.</p>
+<p><b>Q. Có cần seed COB mới từ MSSQL (F_BATCH) không?</b><br>
+Không. Khi có conf, DAG bỏ hẳn bước đọc F_BATCH.</p>
+<p><b>Q. Dữ liệu bronze có bị cộng dồn không?</b><br>
+Không. Parser ghi <code>overwritePartitions</code> → thay partition <code>business_date=D</code>.</p>
+<p><b>Q. Không truyền conf thì sao?</b><br>
+DAG chạy chế độ bình thường (theo marker COB + idempotent skip) — hành vi production không đổi.</p>
+<p><b>Q. <code>l_cob</code> để làm gì?</b><br>
+Chỉ <code>cob_gate</code> dùng cho gate caught-up. Replay mặc định <code>"0"</code> (qua ngay). Muốn gate chặt theo LSN cụ thể: <code>-c '{"business_date":"...","l_cob":"0x..."}'</code>.</p>
+
+<footer>
+Code: <code>dags/lib/cob_marker.py::conf_override</code> · áp dụng tại <code>cob_gate / pull_cob / sftp_hold / pull_jdbc / pull_bulk / build_mart / dbt_model_cob (×5)</code>.<br>
+Bỏ qua: <code>cob_daily_pipeline</code> (monolithic legacy). · Sinh tự động từ pipeline COB v1.4.
+</footer>
+
+</div>
+</body>
+</html>

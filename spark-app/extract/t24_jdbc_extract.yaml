@@ -1,0 +1,53 @@
+# JDBC extract cho pull_jdbc_dag — clone t24_pull_extract.yaml, đổi output → raw/test_jdbc/.
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: "pull-jdbc-extract-{{ params.slug }}-{{ macros.uuid.uuid4().hex[:10] }}"
+  namespace: "{{ var.value.get('SPARK_NAMESPACE', 'bnctl-spark2-development-ns') }}"
+spec:
+  type: Python
+  mode: cluster
+  image: "congtvjits/spark-t24:build-156"
+  imagePullPolicy: IfNotPresent
+  pythonVersion: "3"
+  mainApplicationFile: "local:///opt/jobs/t24_jdbc_extract.py"
+  arguments:
+    - "--url"
+    - "jdbc:sqlserver://mssql.bnctl-kafka-development-ns.svc.cluster.local:1433;databaseName=testdb;encrypt=false"
+    - "--dbtable"
+    - "dbo.{{ params.mssql }}"
+    - "--user"
+    - "sa"
+    - "--output"
+    - "s3a://raw/test_jdbc/{{ params.mssql }}/{{ ti.xcom_pull(task_ids='get_business_date', key='business_date') }}/"
+    - "--mode"
+    - "full"
+  sparkVersion: "3.5.1"
+  sparkConf:
+    "spark.driver.extraClassPath": "/opt/spark/jars/*"
+    "spark.executor.extraClassPath": "/opt/spark/jars/*"
+    "spark.hadoop.fs.s3a.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.EnvironmentVariableCredentialsProvider"
+    "spark.hadoop.fs.s3a.path.style.access": "true"
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+  driver:
+    cores: 1
+    coreLimit: "1000m"
+    memory: "2g"
+    serviceAccount: spark-sa
+    env: &mssql_minio_env
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom: { secretKeyRef: { name: minio-credentials, key: AWS_ACCESS_KEY_ID } }
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom: { secretKeyRef: { name: minio-credentials, key: AWS_SECRET_ACCESS_KEY } }
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: MSSQL_PASSWORD
+        valueFrom: { secretKeyRef: { name: mssql-credentials, key: MSSQL_PASSWORD } }
+  executor:
+    cores: 2
+    instances: 2
+    memory: "2g"
+    env: *mssql_minio_env
+  restartPolicy:
+    type: Never

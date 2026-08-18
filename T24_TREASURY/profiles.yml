@@ -1,0 +1,14 @@
+t24_treasury:
+  outputs:
+    dev:
+      type: dremio
+      object_storage_source: 'hive'
+      dremio_space: '@user'
+      schema: 'gold'
+      software_host: "{{ env_var('DREMIO_HOST') }}"
+      port: 9047
+      use_ssl: false
+      user: "{{ env_var('DREMIO_USER') }}"
+      password: "{{ env_var('DREMIO_PASSWORD') }}"
+      threads: 4
+  target: dev

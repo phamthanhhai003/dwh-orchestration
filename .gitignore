@@ -1,0 +1,108 @@
+# ---------------------------------------------------------------------------
+# Markdown / docs: ignore local scratch notes, keep committed guides
+# ---------------------------------------------------------------------------
+*.md
+!README.md
+!deployment/README.md
+!spark/manifests/guide_for_dev.md
+!arch/ADD_DBT_MODEL_TO_COB.md
+!arch/COB_E2E_TEST_RUNBOOK.md
+!arch/COB_PIPELINE_FLOW_DESCRIPTION.md
+!kafka/uat/CLUSTER_DEPLOYMENT.md
+CLAUDE.md
+
+# ---------------------------------------------------------------------------
+# Credentials / secrets — NEVER commit
+# ---------------------------------------------------------------------------
+# kubeconfig with embedded client private key
+config
+# local one-off script, hardcoded sa password
+import_table.py
+scripts/minio_credentials.py
+kafka/secret.yaml
+kafka/mssql-dev-secret.yaml
+spark/manifests/secret.yaml
+.env
+.env.local
+.env.local.example
+*.env
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# ---------------------------------------------------------------------------
+# dbt / Airflow
+# ---------------------------------------------------------------------------
+target/
+dbt_packages/
+logs/
+airflow.db
+airflow/
+.airflowignore
+
+# ---------------------------------------------------------------------------
+# IDE / OS / tooling
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.claude/
+.qwen/
+
+# ---------------------------------------------------------------------------
+# Data files — source extracts and generated reports stay local
+# ---------------------------------------------------------------------------
+*.xlsx
+*.csv
+!T24_ACCOUNTING/seeds/*.csv
+*.json
+*.html
+!arch/REPLAY_RERUN_GUIDE.html
+*.txt
+!jenkins/plugins.txt
+!kafka/uat/*.txt
+Report_BNCTL_FT_INREMIT-*.csv
+
+# ---------------------------------------------------------------------------
+# Local scratch / temp
+# ---------------------------------------------------------------------------
+*.tmp
+*.temp
+*.bak
+*.db
+*.sqlite
+.minio.sys/
+/tmp/
+/raw/
+/output/
+/elk/
+/uat-pull-first-time/
+temp/
+data_naming/
+data_seed/
+test_seed/
+test.txt
+docs/
+build_report/
+CDC_ISSUE/
+/cob_pipeline/
+Required_SFTP_folder_path
+scripts/mcp/

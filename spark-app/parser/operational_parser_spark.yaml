@@ -1,0 +1,115 @@
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: operational-parser-spark-job
+  namespace: "{{ var.value.get('SPARK_NAMESPACE', 'bnctl-spark2-development-ns') }}"
+spec:
+  type: Python
+  mode: cluster
+  image: "haiptjits/spark-3.5.1:v2"
+  mainApplicationFile: "s3a://spark-scripts/operational_parser_spark.py"
+  # Script đọc PROCESS_MONTH từ env var driver/executor, không dùng CLI arg
+  sparkVersion: "3.5.1"
+
+  sparkConf:
+    "spark.sql.legacy.timeParserPolicy": "LEGACY"
+    # ── Classpath ─────────────────────────────────────────────────────────────
+    "spark.driver.extraClassPath": "/opt/spark/jars/*"
+    "spark.executor.extraClassPath": "/opt/spark/jars/*"
+
+    # ── Iceberg extensions ────────────────────────────────────────────────────
+    "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions"
+    "spark.sql.catalog.hive": "org.apache.iceberg.spark.SparkCatalog"
+    "spark.sql.catalog.hive.type": "hive"
+    "spark.sql.catalog.hive.uri": "{{ var.value.HIVE_METASTORE_URI }}"
+    "spark.sql.catalog.hive.warehouse": "s3a://hive-warehouse"
+    "spark.sql.defaultCatalog": "hive"
+
+    # ── Iceberg S3/MinIO I/O ──────────────────────────────────────────────────
+    "spark.sql.catalog.hive.io-impl": "org.apache.iceberg.aws.s3.S3FileIO"
+    "spark.sql.catalog.hive.s3.endpoint": "{{ conn.minio_conn.extra_dejson.endpoint_url }}"
+    "spark.sql.catalog.hive.s3.path-style-access": "true"
+    "spark.sql.catalog.hive.client.region": "us-east-1"
+    "spark.sql.catalog.hive.s3.access-key-id": "{{ conn.minio_conn.login }}"
+    "spark.sql.catalog.hive.s3.secret-access-key": "{{ conn.minio_conn.password }}"
+
+    # ── Hadoop S3A (đọc file raw từ MinIO) ───────────────────────────────────
+    "spark.hadoop.fs.s3a.endpoint": "{{ conn.minio_conn.extra_dejson.endpoint_url }}"
+    "spark.hadoop.fs.s3a.access.key": "{{ conn.minio_conn.login }}"
+    "spark.hadoop.fs.s3a.secret.key": "{{ conn.minio_conn.password }}"
+    "spark.hadoop.fs.s3a.path.style.access": "true"
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+
+    # ── S3A Performance: tối ưu đọc/ghi MinIO song song ──────────────────────
+    # Script đọc nhiều loại file (CSV + XLSX) từ nhiều folder cùng lúc
+    "spark.hadoop.fs.s3a.connection.maximum": "100"
+    "spark.hadoop.fs.s3a.connection.establish.timeout": "5000"
+    "spark.hadoop.fs.s3a.connection.timeout": "200000"
+    "spark.hadoop.fs.s3a.fast.upload": "true"
+    "spark.hadoop.fs.s3a.fast.upload.buffer": "bytebuffer"      # dùng RAM executor thay vì disk
+    "spark.hadoop.fs.s3a.fast.upload.active.blocks": "4"
+    "spark.hadoop.fs.s3a.multipart.size": "67108864"            # 64MB/part
+    "spark.hadoop.fs.s3a.multipart.threshold": "134217728"      # file > 128MB thì multipart
+
+    # ── Iceberg metadata sampling ─────────────────────────────────────────────
+    "spark.sql.catalog.hive.table-default.metastore.sampling.size": "1"
+    "spark.sql.catalog.hive.schema-sampling.size": "1"
+
+    # ── Partition & Shuffle: tính cho 4 executor × 2 core = 8 core ───────────
+    # Script này xử lý nhiều file nhỏ theo tháng → data ít hơn AML parser
+    # 8 core × 2 = 16 shuffle partition là đủ, tránh overhead của default 200
+    "spark.sql.shuffle.partitions": "16"
+    "spark.sql.files.maxPartitionBytes": "134217728"            # 128MB/partition khi đọc CSV
+    "spark.sql.files.openCostInBytes": "4194304"                # 4MB open cost
+
+    # ── AQE: tự gom partition nhỏ sau khi union nhiều file ───────────────────
+    # Quan trọng vì script union N file nhỏ rồi ghi 1 lần
+    "spark.sql.adaptive.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.minPartitionNum": "4"
+    "spark.sql.adaptive.advisoryPartitionSizeInBytes": "268435456"  # target 256MB/file output
+    "spark.sql.adaptive.skewJoin.enabled": "true"
+
+    # ── Catalyst optimizer ────────────────────────────────────────────────────
+    "spark.sql.optimizer.maxIterations": "200"
+
+    # ── PostgreSQL HMS: tối ưu commit metadata Iceberg ────────────────────────
+    "datanucleus.rdbms.statementBatchSize": "50"
+    "datanucleus.connectionPool.maxPoolSize": "10"
+    "datanucleus.connectionPool.minPoolSize": "2"
+    "hive.metastore.client.socket.timeout": "600"
+
+    # ── Parquet output: zstd + vectorized read cho Dremio ────────────────────
+    "spark.sql.parquet.compression.codec": "zstd"
+    "spark.sql.parquet.enableVectorizedReader": "true"
+
+    # ── Memory tuning ─────────────────────────────────────────────────────────
+    "spark.memory.fraction": "0.8"
+    "spark.memory.storageFraction": "0.3"
+    # Tắt broadcast join — script không có join, tránh driver OOM khi collect
+    "spark.sql.autoBroadcastJoinThreshold": "-1"
+
+  driver:
+    cores: {{ var.value.get('SPARK_OPERATIONAL_PARSER_DRIVER_CORES') | int }}
+    memory: "{{ var.value.get('SPARK_OPERATIONAL_PARSER_DRIVER_MEMORY') }}"
+    memoryOverhead: "{{ var.value.get('SPARK_OPERATIONAL_PARSER_DRIVER_OVERHEAD') }}"
+    serviceAccount: spark-sa
+    env:
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: PROCESS_MONTH
+        value: "{{ params.get('PROCESS_MONTH', '') }}"
+
+  executor:
+    cores: {{ var.value.get('SPARK_OPERATIONAL_PARSER_EXECUTOR_CORES') | int }}
+    instances: {{ var.value.get('SPARK_OPERATIONAL_PARSER_EXECUTOR_INSTANCES') | int }}
+    memory: "{{ var.value.get('SPARK_OPERATIONAL_PARSER_EXECUTOR_MEMORY') }}"
+    memoryOverhead: "{{ var.value.get('SPARK_OPERATIONAL_PARSER_EXECUTOR_OVERHEAD') }}"
+    env:
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: PROCESS_MONTH
+        value: "{{ params.get('PROCESS_MONTH', '') }}"
+
+  restartPolicy:
+    type: Never

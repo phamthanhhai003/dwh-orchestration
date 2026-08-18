@@ -1,0 +1,18 @@
+# StorageClass rieng cho Kafka tren UAT - Longhorn replica = 1.
+# Ly do: Kafka da tu replicate RF=3 o tang application -> Longhorn nhan 3 nua la
+# thua (9 ban ghi/message) va phu thuoc suc khoe Longhorn UAT (von dang yeu:
+# CSI sidecar restart kinh nien do control-plane qua tai, lease fail).
+# Mat 1 node = mat 1 replica Longhorn cua 1 broker -> Kafka tu re-replicate
+# tu 2 broker con lai khi pod quay lai. Chap nhan duoc cho UAT.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-kafka
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: "1"
+  staleReplicaTimeout: "2880"
+  dataLocality: "best-effort"   # keo replica ve cung node voi pod -> IO local, bot phu thuoc network/CSI

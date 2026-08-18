@@ -1,0 +1,38 @@
+# chart: logstash 7.17.3
+# repo: https://github.com/elastic/helm-charts
+---
+extraEnvs:
+- name: MINIO_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      key: access_key
+      name: minio-credentials
+- name: MINIO_SECRET_KEY
+  valueFrom:
+    secretKeyRef:
+      key: secret_key
+      name: minio-credentials
+logstashPipeline:
+  logstash.conf: "input {\n  s3 {\n    bucket => \"airflow-logs\"\n    endpoint =>\
+    \ \"http://minio-svc.bnctl-minio-development-ns.svc.cluster.local:9000\"\n   \
+    \ access_key_id => \"${MINIO_ACCESS_KEY}\"\n    secret_access_key => \"${MINIO_SECRET_KEY}\"\
+    \n    codec => \"json_lines\"\n    interval => 60\n    additional_settings =>\
+    \ {\n      force_path_style => true\n    }\n    sincedb_path => \"/usr/share/logstash/data/.sincedb_airflow\"\
+    \n  }\n}\nfilter {\n  grok {\n    match => {\n      \"[@metadata][s3][key]\" =>\
+    \ \"dag_id=%{DATA:dag_id}/run_id=%{DATA:run_id}/task_id=%{DATA:task_id}/%{DATA}/attempt=%{INT:attempt}\"\
+    \n    }\n    tag_on_failure => []\n  }\n  date {\n    match => [\"timestamp\"\
+    , \"ISO8601\"]\n    target => \"@timestamp\"\n  }\n}\noutput {\n  elasticsearch\
+    \ {\n    hosts => [\"http://elasticsearch-master:9200\"]\n    index => \"airflow-logs-%{+YYYY.MM.dd}\"\
+    \n  }\n}\n"
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClass: longhorn
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+

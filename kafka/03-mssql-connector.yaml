@@ -1,0 +1,45 @@
+# Debezium SQL Server connector (CDC tu MSSQL)
+# LUU Y: dien lai cac placeholder <...> khi co thong tin MSSQL VM cua ban:
+#   - database.hostname  : IP/hostname MSSQL VM (reachable tu trong cluster)
+#   - database.names     : ten database da bat CDC
+#   - table.include.list : danh sach bang schema.table can capture
+#
+# Tren MSSQL truoc khi connect (chay 1 lan tren DB nguon):
+#   EXEC sys.sp_cdc_enable_db;                              -- bat CDC cap database
+#   EXEC sys.sp_cdc_enable_table                            -- bat CDC tung bang
+#        @source_schema = N'dbo',
+#        @source_name   = N'<ten_bang>',
+#        @role_name     = NULL;
+#   -- Va SQL Server Agent phai dang chay.
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnector
+metadata:
+  name: mssql-source-connector
+  namespace: bnctl-kafka-development-ns
+  labels:
+    strimzi.io/cluster: debezium-connect
+spec:
+  class: io.debezium.connector.sqlserver.SqlServerConnector
+  tasksMax: 1
+  config: 
+    # --- Ket noi MSSQL (in-cluster fixture, xem kafka/mssql-dev.yaml) ---
+    database.hostname: mssql.bnctl-kafka-development-ns.svc.cluster.local  
+    database.port: 1433 
+    # Credentials KHONG inline — doc tu Secret mssql-credentials qua FileConfigProvider
+    # (02-kafka-connect.yaml mount secret + khai config.providers.file; xem secret.example.yaml).
+    database.user: "${file:/opt/kafka/external-configuration/mssql-credentials/mssql.properties:username}"
+    database.password: "${file:/opt/kafka/external-configuration/mssql-credentials/mssql.properties:password}"
+    database.names: testdb
+    database.encrypt: false            # DEV: tat TLS JDBC; bat len neu MSSQL yeu cau
+    # --- Topic & schema history ---
+    # 2026-06-11: doi prefix mssql -> t24 (khop convention v1.4 t24.*).
+    # Doi prefix = doi offset key => connector snapshot lai tu dau (can thiet
+    # vi FBNK_ACCOUNT bi recreate capture instance + FBNK_CUSTOMER moi them).
+    topic.prefix: t24                  # cac topic se la: t24.<db>.<schema>.<table>
+    schema.history.internal.kafka.bootstrap.servers: cdc-kafka-bootstrap:9092
+    schema.history.internal.kafka.topic: schema-changes.t24
+    # --- Snapshot & capture ---
+    snapshot.mode: initial             # snapshot day du roi stream incremental
+    table.include.list: dbo.F_BATCH,dbo.FBNK_STMT_ENTRY,dbo.FBNK_STMT_ENTRY_DETAIL,dbo.FBNK_CATEG_ENTRY,dbo.FBNK_CATEG_ENTRY_DETAIL,dbo.FBNK_AA_PROCESS_DETAILS,dbo.FBNK_ACCT_ACTIVITY,dbo.FBNK_ACCOUNT,dbo.AAFBNK_AA010,dbo.FBNK_AA_ARR_ACCOUNT,dbo.FBNK_AA_BILL_DETAILS,dbo.FBNK_CUSTOMER,dbo.FBNK_AA_ACCOUNT_DETAILS,dbo.FBNK_PV_ASSET_DETAIL,dbo.FBNK_ACCOUNT_STATEMENT,dbo.FBNK_AA_ARRANGEMENT,dbo.AAFBNK_AA063,dbo.FBNK_AC_LOCKED_EVENTS,dbo.FBNK_FUNDS_TRANSFER,dbo.FBNK_CATEG_ENT_TODAY,dbo.ACFBNK_ST002,dbo.ACFBNK_CA002,dbo.FBNK_ACCOUNT_HIS,dbo.AAFBNK_AA093,dbo.FBNK_STMT_PRINTED,dbo.FBNK_ACCT_STMT_PRINT,dbo.FBNK_CUSTOMER_ACCOUNT,dbo.FBNK_ACCOUNT_CLOSED,dbo.FBNK_AA_ARR_TERM_AMOUNT,dbo.FBNK_AA_ARR_CUSTOMER,dbo.FBNK_EM_LO_APPLICATION,dbo.F_ACCOUNT_CONCAT,dbo.F_AA_CUSTOMER_ROLE,dbo.FBNK_AC_SUB_ACCOUNT,dbo.FBNK_TELLER,dbo.ACFBNK_AC009,dbo.FBNK_ACCT_ENT_TODAY,dbo.FBNK_EM_DL_APPLICATION,dbo.F_HOLD_CONTROL
+    tombstones.on.delete: true
+    decimal.handling.mode: double      # tranh byte-encoded decimal kho consume

@@ -1,0 +1,70 @@
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnect
+metadata:
+  name: debezium-connect
+  namespace: bnctl-kafka-development-ns
+spec:
+  bootstrapServers: cdc-kafka-bootstrap:9092
+  config:
+    config.providers: file
+    config.providers.file.class: org.apache.kafka.common.config.provider.FileConfigProvider
+    config.storage.replication.factor: 1
+    config.storage.topic: connect-configs
+    group.id: debezium-connect
+    key.converter: org.apache.kafka.connect.json.JsonConverter
+    key.converter.schemas.enable: false
+    offset.storage.replication.factor: 1
+    offset.storage.topic: connect-offsets
+    status.storage.replication.factor: 1
+    status.storage.topic: connect-status
+    value.converter: org.apache.kafka.connect.json.JsonConverter
+    value.converter.schemas.enable: false
+  externalConfiguration:
+    volumes:
+    - name: mssql-credentials
+      secret:
+        secretName: mssql-credentials
+  image: congtvjits/debezium-connect-sqlserver:0.45.0-3.4.0
+  replicas: 1
+  resources:
+    limits:
+      cpu: '1'
+      memory: 2Gi
+    requests:
+      cpu: 250m
+      memory: 1Gi
+  version: 3.9.0
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnector
+metadata:
+  labels:
+    strimzi.io/cluster: debezium-connect
+  name: mssql-source-connector
+  namespace: bnctl-kafka-development-ns
+spec:
+  class: io.debezium.connector.sqlserver.SqlServerConnector
+  config:
+    database.encrypt: false
+    database.hostname: mssql.bnctl-kafka-development-ns.svc.cluster.local
+    database.names: testdb
+    database.password: ${file:/opt/kafka/external-configuration/mssql-credentials/mssql.properties:password}
+    database.port: 1433
+    database.user: ${file:/opt/kafka/external-configuration/mssql-credentials/mssql.properties:username}
+    decimal.handling.mode: double
+    schema.history.internal.kafka.bootstrap.servers: cdc-kafka-bootstrap:9092
+    schema.history.internal.kafka.topic: schema-changes.t24
+    schema.history.internal.store.only.recovered.tables.ddl: 'false'
+    snapshot.mode: initial
+    table.include.list: dbo.F_BATCH,dbo.FBNK_STMT_ENTRY,dbo.FBNK_STMT_ENTRY_DETAIL,dbo.FBNK_CATEG_ENTRY,dbo.FBNK_CATEG_ENTRY_DETAIL,dbo.FBNK_AA_PROCESS_DETAILS,dbo.FBNK_ACCT_ACTIVITY,dbo.FBNK_ACCOUNT,dbo.AAFBNK_AA010,dbo.FBNK_AA_ARR_ACCOUNT,dbo.FBNK_AA_BILL_DETAILS,dbo.FBNK_CUSTOMER,dbo.FBNK_AA_ACCOUNT_DETAILS,dbo.FBNK_PV_ASSET_DETAIL,dbo.FBNK_ACCOUNT_STATEMENT,dbo.FBNK_AA_ARRANGEMENT,dbo.AAFBNK_AA063,dbo.FBNK_AC_LOCKED_EVENTS,dbo.FBNK_FUNDS_TRANSFER,dbo.FBNK_CATEG_ENT_TODAY,dbo.ACFBNK_ST002,dbo.ACFBNK_CA002,dbo.FBNK_ACCOUNT_HIS,dbo.AAFBNK_AA093,dbo.FBNK_STMT_PRINTED,dbo.FBNK_ACCT_STMT_PRINT,dbo.FBNK_CUSTOMER_ACCOUNT,dbo.FBNK_ACCOUNT_CLOSED,dbo.FBNK_AA_ARR_TERM_AMOUNT,dbo.FBNK_AA_ARR_CUSTOMER,dbo.FBNK_EM_LO_APPLICATION,dbo.F_ACCOUNT_CONCAT,dbo.F_AA_CUSTOMER_ROLE,dbo.FBNK_AC_SUB_ACCOUNT,dbo.FBNK_TELLER,dbo.ACFBNK_AC009,dbo.FBNK_ACCT_ENT_TODAY,dbo.FBNK_EM_DL_APPLICATION,dbo.F_HOLD_CONTROL
+    tombstones.on.delete: true
+    topic.prefix: t24
+    transforms: extractTable
+    transforms.extractTable.topic.regex: cdc\.testdb\.dbo\.(.*)
+    transforms.extractTable.topic.replacement: $1
+    transforms.extractTable.type: io.debezium.transforms.ByLogicalTableRouter
+    transforms.route1.topic.regex: jits\.testdb\.dbo\.FBNK_ACCOUNT
+    transforms.route1.topic.replacement: JITS
+    transforms.route1.type: io.debezium.transforms.ByLogicalTableRouter
+  state: running
+  tasksMax: 1
