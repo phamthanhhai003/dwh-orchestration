@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCP Fresh Pipeline — Performance Report</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f4f8; color: #1a202c; line-height: 1.7; font-size: 16px; }
+  .container { max-width: 1400px; margin: 0 auto; padding: 2.5rem; }
+
+  .header { background: #fff; border-radius: 12px; padding: 2rem 2.5rem; margin-bottom: 2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.08); border-left: 6px solid #2b6cb0; }
+  .header h1 { font-size: 2rem; color: #1a202c; font-weight: 800; }
+  .header .subtitle { color: #4a5568; font-size: 1rem; margin-top: 0.4rem; }
+
+  .eli10 { background: #fff; border-left: 5px solid #38a169; border-radius: 10px; padding: 1.8rem 2rem; margin-bottom: 2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+  .eli10 h2 { color: #276749; font-size: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1rem; }
+  .eli10 p { color: #2d3748; font-size: 1rem; margin-bottom: 0.7rem; }
+  .eli10 ul li { color: #2d3748; font-size: 1rem; }
+  .eli10 code { background: #edf2f7; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #c53030; }
+  .eli10 .flow { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
+  .eli10 .flow .box { background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 6px; padding: 0.4rem 0.9rem; font-size: 0.9rem; color: #2b6cb0; font-weight: 600; }
+  .eli10 .flow .arrow { color: #a0aec0; font-size: 1.2rem; font-weight: 700; }
+
+  .section { margin-bottom: 3rem; }
+  .section-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.2rem; padding-bottom: 0.7rem; border-bottom: 2px solid #e2e8f0; }
+  .section-header h2 { font-size: 1.4rem; color: #1a202c; font-weight: 700; }
+  .env-badge { padding: 0.3rem 0.9rem; border-radius: 20px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .badge-dev { background: #bee3f8; color: #2b6cb0; }
+  .badge-uat { background: #c6f6d5; color: #276749; }
+
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .meta-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .meta-card .label { font-size: 0.75rem; color: #718096; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  .meta-card .value { font-size: 1rem; color: #1a202c; font-weight: 600; margin-top: 0.3rem; font-family: monospace; }
+
+  .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.7rem; margin-bottom: 1.5rem; }
+  .config-item { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.7rem 1rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .config-item .k { font-size: 0.85rem; color: #4a5568; font-weight: 500; }
+  .config-item .v { font-size: 0.95rem; color: #c05621; font-weight: 700; font-family: monospace; }
+
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.95rem; background: #fff; }
+  thead { background: #edf2f7; }
+  thead th { padding: 0.9rem 1.2rem; text-align: left; color: #2d3748; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.07em; white-space: nowrap; border-bottom: 2px solid #cbd5e0; }
+  thead th.num { text-align: right; }
+  tbody tr { border-bottom: 1px solid #edf2f7; transition: background 0.1s; }
+  tbody tr:hover { background: #f7fafc; }
+  tbody tr:last-child { border-bottom: none; }
+  td { padding: 0.85rem 1.2rem; vertical-align: middle; }
+  td.num { text-align: right; font-family: monospace; font-size: 0.95rem; color: #1a202c; font-weight: 500; }
+  td.table-name { font-family: monospace; font-size: 0.9rem; color: #2b6cb0; white-space: nowrap; font-weight: 600; }
+  td.tbd { color: #a0aec0; font-style: italic; font-size: 0.88rem; text-align: right; }
+  td.zero { color: #a0aec0; text-align: right; font-family: monospace; }
+  td.fail { color: #c53030; font-weight: 700; text-align: right; font-size: 0.88rem; }
+
+  .tag { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-left: 0.4rem; vertical-align: middle; }
+  .tag-ok    { background: #c6f6d5; color: #22543d; }
+  .tag-empty { background: #fed7d7; color: #9b2c2c; }
+  .tag-fail  { background: #fed7d7; color: #9b2c2c; }
+
+  .size-bar-wrap { width: 90px; height: 7px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  .size-bar { height: 100%; background: #4299e1; border-radius: 4px; }
+
+  .note { font-size: 0.88rem; color: #718096; margin-top: 1rem; line-height: 1.6; }
+  .legend { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 1rem; }
+  .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #4a5568; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>BCP Fresh Pipeline — Performance Report</h1>
+    <div class="subtitle">pull_bulk_fresh DAG · MSSQL testdb → MinIO → Hive Iceberg · Updated 2026-06-25</div>
+  </div>
+
+  <!-- Intro -->
+  <div class="eli10" style="border-left-color:#2b6cb0;">
+    <h2 style="color:#2b6cb0;">Giới thiệu</h2>
+    <p>Báo cáo này ghi lại hiệu năng thực đo của pipeline <strong>pull_bulk_fresh</strong> — pipeline đồng bộ 22 bảng <strong>reference/lookup</strong> (không phải CDC, full snapshot mỗi ngày) từ MSSQL vào Hive Iceberg thông qua MinIO, sử dụng BCP làm công cụ extract. Dữ liệu được đo trên môi trường <strong>DEV</strong> (full data — bảng reference nhỏ, không cần cap 100K rows) và <strong>UAT</strong> (placeholder, sẽ fill sau).</p>
+    <p>Khác với <code>pull_bulk</code> (36 bảng CDC, transactional, có thể hàng triệu dòng), <code>pull_bulk_fresh</code> xử lý bảng reference nhỏ — toàn bộ 22 bảng hoàn thành trong ~10 phút trên DEV.</p>
+    <p>Mục đích: cung cấp baseline thời gian chạy, xác nhận pipeline end-to-end, và là tiền đề để estimate tổng thời gian init load trên UAT/PROD.</p>
+  </div>
+
+  <!-- BCP ELI10 -->
+  <div class="eli10">
+    <h2>BCP (Bulk Copy Program) — Định nghĩa &amp; Cách hoạt động</h2>
+    <p><strong>BCP</strong> là command-line utility đi kèm Microsoft SQL Server (<code>mssql-tools</code>). Chức năng: copy dữ liệu giữa SQL Server instance và file — theo hướng <em>queryout</em> (DB → stdout) hoặc <em>in</em> (file → DB).</p>
+    <p><strong>Cách hoạt động:</strong> BCP mở kết nối TDS (Tabular Data Stream — giao thức native của SQL Server) đến database, thực thi query, và stream kết quả ra stdout dưới dạng text thuần (TSV). Không serialize qua JDBC driver, không đi qua JVM.</p>
+    <p><strong>Resource tiêu thụ:</strong></p>
+    <ul style="margin: 0.5rem 0 0.5rem 1.2rem; color: #2d3748; font-size: 1rem; line-height: 1.9;">
+      <li><strong>CPU (MSSQL server):</strong> query execution + serialize sang TSV text</li>
+      <li><strong>CPU (client pod):</strong> <code>grep</code> filter stdout → <code>pyarrow</code> parse TSV → serialize Parquet (CPU-bound)</li>
+      <li><strong>RAM (client pod):</strong> buffer pyarrow chunk in-memory (~250 MB/chunk ở 500K rows × avg row size)</li>
+      <li><strong>Network:</strong> toàn bộ dữ liệu stream từ MSSQL pod → client pod qua cluster network (TCP/TDS)</li>
+      <li><strong>Storage:</strong> không ghi disk local — Parquet chunk ghi thẳng lên MinIO qua boto3 stream upload</li>
+    </ul>
+    <p><strong>Pipeline 3 bước / bảng:</strong></p>
+    <div class="flow">
+      <div class="box">① Extract</div>
+      <div class="arrow">→</div>
+      <div class="box">BCP stdout (TSV)</div>
+      <div class="arrow">→</div>
+      <div class="box">pyarrow → Parquet</div>
+      <div class="arrow">→</div>
+      <div class="box">MinIO s3a://raw/test_fresh/</div>
+      <div class="arrow">·</div>
+      <div class="box">② Parse</div>
+      <div class="arrow">→</div>
+      <div class="box">Spark đọc Parquet</div>
+      <div class="arrow">→</div>
+      <div class="box">XML parse → Iceberg hive.test.*</div>
+      <div class="arrow">·</div>
+      <div class="box">③ Seal</div>
+      <div class="arrow">→</div>
+      <div class="box">Dremio refresh + count(*) → etl_control</div>
+    </div>
+  </div>
+
+  <!-- Luồng chạy -->
+  <div class="eli10" style="border-left-color:#805ad5;">
+    <h2 style="color:#553c9a;">Luồng chạy &amp; Cách tính size</h2>
+    <p style="margin-bottom:1rem;color:#4a5568;">22 bảng chạy song song, mỗi bảng đi qua 3 bước tuần tự:</p>
+    <div style="display:flex;gap:0.5rem;align-items:stretch;flex-wrap:wrap;margin-bottom:1.4rem;">
+      <div style="flex:1;min-width:180px;background:#ebf8ff;border:1px solid #bee3f8;border-radius:8px;padding:1rem 1.2rem;">
+        <div style="font-size:0.78rem;font-weight:700;color:#2b6cb0;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem;">① Extract <span style="font-weight:400;color:#718096">· pool = 4 slots</span></div>
+        <div style="font-size:0.93rem;color:#2d3748;line-height:1.7;">BCP stream TSV từ MSSQL<br>→ full table (không cap rows)<br>→ upload Parquet lên MinIO<br><span style="color:#718096;font-size:0.85rem;">~10–13s/bảng (bảng nhỏ)</span></div>
+      </div>
+      <div style="display:flex;align-items:center;color:#a0aec0;font-size:1.4rem;padding:0 0.2rem;">→</div>
+      <div style="flex:1;min-width:180px;background:#faf5ff;border:1px solid #e9d8fd;border-radius:8px;padding:1rem 1.2rem;">
+        <div style="font-size:0.78rem;font-weight:700;color:#553c9a;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem;">② Parse <span style="font-weight:400;color:#718096">· pool = 5 slots</span></div>
+        <div style="font-size:0.93rem;color:#2d3748;line-height:1.7;">Spark đọc Parquet từ MinIO<br>→ parse XML → columns<br>→ ghi Hive Iceberg hive.test.*<br><span style="color:#718096;font-size:0.85rem;">75–310s/bảng (Spark overhead)</span></div>
+      </div>
+      <div style="display:flex;align-items:center;color:#a0aec0;font-size:1.4rem;padding:0 0.2rem;">→</div>
+      <div style="flex:1;min-width:180px;background:#f0fff4;border:1px solid #c6f6d5;border-radius:8px;padding:1rem 1.2rem;">
+        <div style="font-size:0.78rem;font-weight:700;color:#276749;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem;">③ Seal <span style="font-weight:400;color:#718096">· pool = 7 slots</span></div>
+        <div style="font-size:0.93rem;color:#2d3748;line-height:1.7;">Dremio refresh metadata<br>→ đếm rows theo ngày<br>→ ghi log etl_control<br><span style="color:#718096;font-size:0.85rem;">~9–11s/bảng</span></div>
+      </div>
+    </div>
+    <p style="color:#4a5568;font-size:0.93rem;"><strong>Ghi chú size:</strong> Bảng reference — pull full data, không giới hạn 100K rows như CDC. Dev size = kích thước thực tế của bảng trong testdb tại COB 2026-06-26.</p>
+  </div>
+
+  <!-- ═══════════════════ DEV ═══════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>DEV Environment</h2>
+      <span class="env-badge badge-dev">DEV</span>
+    </div>
+
+    <div class="meta-grid">
+      <div class="meta-card">
+        <div class="label">DAG Run ID</div>
+        <div class="value" style="font-size:0.72rem">manual__2026-06-25T13:15:45_WCASD4</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Start (ICT)</div>
+        <div class="value">2026-06-25 20:15</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">End (ICT)</div>
+        <div class="value">2026-06-25 20:26</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Wall Time</div>
+        <div class="value">~10m 24s</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">COB</div>
+        <div class="value">2026-06-26</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Tables</div>
+        <div class="value">22 tables</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Source DB</div>
+        <div class="value">testdb (MSSQL)</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Target</div>
+        <div class="value">hive.test.*</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Row Cap</div>
+        <div class="value">None (full)</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Result</div>
+        <div class="value" style="color:#276749;">21/22 ✓</div>
+      </div>
+    </div>
+
+    <!-- Spark Config -->
+    <p style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#718096;margin-bottom:0.7rem;">Spark Configuration (Parse)</p>
+    <div class="config-grid">
+      <div class="config-item"><span class="k">Image</span><span class="v">spark-t24:build-156</span></div>
+      <div class="config-item"><span class="k">Driver CPU</span><span class="v">1 core / 1000m</span></div>
+      <div class="config-item"><span class="k">Driver RAM</span><span class="v">1 GB</span></div>
+      <div class="config-item"><span class="k">Executor</span><span class="v">2 × 2 cores</span></div>
+      <div class="config-item"><span class="k">Executor RAM</span><span class="v">2 GB each</span></div>
+      <div class="config-item"><span class="k">shuffle.partitions</span><span class="v">4</span></div>
+      <div class="config-item"><span class="k">Catalog</span><span class="v">Hive Iceberg</span></div>
+      <div class="config-item"><span class="k">Storage</span><span class="v">MinIO (S3A)</span></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>MSSQL Table</th>
+            <th>Hive Target (test)</th>
+            <th class="num">Rows (DEV)</th>
+            <th class="num">Parquet Size</th>
+            <th class="num">Extract (s)</th>
+            <th class="num">Parse (s)</th>
+            <th class="num">Seal (s)</th>
+            <th class="num">Total (s)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- sorted by parse duration desc -->
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">1</td>
+            <td class="table-name">AAFBNK_AA508<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_aa_simulation_runner</td>
+            <td class="num">85,379</td>
+            <td class="num">
+              9.70 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:100%"></div></div>
+            </td>
+            <td class="num">13</td>
+            <td class="num">310</td>
+            <td class="num">10</td>
+            <td class="num">333</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">2</td>
+            <td class="table-name">FBNK_MCB_GROUP<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_mcb_group</td>
+            <td class="num">140</td>
+            <td class="num">
+              0.53 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:5%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">190</td>
+            <td class="num">11</td>
+            <td class="num">212</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">3</td>
+            <td class="table-name">F_DEPT_ACCT_OFFICER<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_dept_acct_officer</td>
+            <td class="num">518</td>
+            <td class="num">
+              0.07 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:1%"></div></div>
+            </td>
+            <td class="num">10</td>
+            <td class="num">109</td>
+            <td class="num">10</td>
+            <td class="num">129</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">4</td>
+            <td class="table-name">F_EB_SYSTEM_ID<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_eb_system_id</td>
+            <td class="num">1,121</td>
+            <td class="num">
+              0.06 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:1%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">109</td>
+            <td class="num">10</td>
+            <td class="num">130</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">5</td>
+            <td class="table-name">FBNK_TRANSACTION<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_transaction</td>
+            <td class="num">885</td>
+            <td class="num">
+              0.07 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:1%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">108</td>
+            <td class="num">10</td>
+            <td class="num">129</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">6</td>
+            <td class="table-name">F_BNCTL_CUS_SUBDIST<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_bnctl_cus_subdist</td>
+            <td class="num">72</td>
+            <td class="num">
+              0.00 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">99</td>
+            <td class="num">10</td>
+            <td class="num">120</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">7</td>
+            <td class="table-name">FBNK_CURRENCY<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_currency</td>
+            <td class="num">7</td>
+            <td class="num">
+              0.00 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">97</td>
+            <td class="num">10</td>
+            <td class="num">118</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">8</td>
+            <td class="table-name">F_ARCHIVE<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_archive</td>
+            <td class="num">59</td>
+            <td class="num">
+              0.02 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">92</td>
+            <td class="num">10</td>
+            <td class="num">113</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">9</td>
+            <td class="table-name">F_USER<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_user</td>
+            <td class="num">502</td>
+            <td class="num">
+              0.17 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:2%"></div></div>
+            </td>
+            <td class="num">13</td>
+            <td class="num">91</td>
+            <td class="num">10</td>
+            <td class="num">114</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">10</td>
+            <td class="table-name">F_POSTING_RESTRICT<span class="tag tag-empty">empty</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_posting_restrict</td>
+            <td class="zero">0</td>
+            <td class="num">
+              0.00 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">10</td>
+            <td class="num">91</td>
+            <td class="num">10</td>
+            <td class="num">111</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">11</td>
+            <td class="table-name">F_COMPANY_CONSOL<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_company_consol</td>
+            <td class="num">2</td>
+            <td class="num">
+              0.00 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">91</td>
+            <td class="num">9</td>
+            <td class="num">111</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">12</td>
+            <td class="table-name">F_AC_STMT_PARAMETER<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_ac_stmt_parameter</td>
+            <td class="num">1</td>
+            <td class="num">
+              0.00 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">89</td>
+            <td class="num">10</td>
+            <td class="num">110</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">13</td>
+            <td class="table-name">F_EB_LOOKUP<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_eb_lookup</td>
+            <td class="num">2,257</td>
+            <td class="num">
+              0.13 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:1%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">87</td>
+            <td class="num">10</td>
+            <td class="num">108</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">14</td>
+            <td class="table-name">F_COMPANY_SMS_GROUP<span class="tag tag-empty">empty</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_company_sms_group</td>
+            <td class="zero">0</td>
+            <td class="num">
+              0.00 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">10</td>
+            <td class="num">86</td>
+            <td class="num">10</td>
+            <td class="num">106</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">15</td>
+            <td class="table-name">F_COMPANY<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_company</td>
+            <td class="num">15</td>
+            <td class="num">
+              0.01 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">86</td>
+            <td class="num">10</td>
+            <td class="num">107</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">16</td>
+            <td class="table-name">F_BNCTL_CUS_DIST<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_bnctl_cus_dist</td>
+            <td class="num">14</td>
+            <td class="num">
+              0.00 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">84</td>
+            <td class="num">10</td>
+            <td class="num">105</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">17</td>
+            <td class="table-name">F_BNCTL_CUS_VILL<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_bnctl_cus_vill</td>
+            <td class="num">565</td>
+            <td class="num">
+              0.02 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">10</td>
+            <td class="num">84</td>
+            <td class="num">10</td>
+            <td class="num">104</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">18</td>
+            <td class="table-name">F_CATEGORY<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_category</td>
+            <td class="num">1,030</td>
+            <td class="num">
+              0.08 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:1%"></div></div>
+            </td>
+            <td class="num">10</td>
+            <td class="num">82</td>
+            <td class="num">10</td>
+            <td class="num">102</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">19</td>
+            <td class="table-name">FBNK_AA_PRODUCT<span class="tag tag-empty">empty</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_aa_product</td>
+            <td class="zero">0</td>
+            <td class="num">
+              0.00 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">13</td>
+            <td class="num">80</td>
+            <td class="num">10</td>
+            <td class="num">103</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">20</td>
+            <td class="table-name">F_GIC_ID<span class="tag tag-ok">OK</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_gic_id</td>
+            <td class="num">15</td>
+            <td class="num">
+              0.00 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">80</td>
+            <td class="num">11</td>
+            <td class="num">102</td>
+          </tr>
+          <tr>
+            <td style="color:#718096;font-size:0.85rem;">21</td>
+            <td class="table-name">F_MNEMONIC_COMPANY<span class="tag tag-empty">empty</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_mnemonic_company</td>
+            <td class="zero">0</td>
+            <td class="num">
+              0.00 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="num">75</td>
+            <td class="num">11</td>
+            <td class="num">97</td>
+          </tr>
+          <tr style="background:#fff5f5;">
+            <td style="color:#718096;font-size:0.85rem;">22</td>
+            <td class="table-name">F_PL_CLOSE_DATES<span class="tag tag-fail">FAILED</span></td>
+            <td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.test.t24_pl_close_dates</td>
+            <td class="tbd">—</td>
+            <td class="num">
+              0.00 MB
+              <div class="size-bar-wrap"><div class="size-bar" style="width:0%;background:#fc8181"></div></div>
+            </td>
+            <td class="num">11</td>
+            <td class="fail">FAILED</td>
+            <td class="tbd">—</td>
+            <td class="fail">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#c6f6d5;border:1px solid #38a169"></div>OK = parse + seal success</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fed7d7;border:1px solid #fc8181"></div>empty = 0 rows trong testdb, extract vẫn ghi placeholder</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fc8181"></div>FAILED = parse lỗi (F_PL_CLOSE_DATES thiếu schema trong ss_full.json)</div>
+    </div>
+
+    <p class="note">* Parse duration bao gồm Spark submit → driver start → executor start → XML parse → Iceberg write. Overhead Spark cluster chiếm ~60–70s ngay cả với bảng 0 rows. Bảng lớn nhất AAFBNK_AA508 (85K rows, 9.7 MB parquet) parse 310s.</p>
+
+    <!-- Summary box -->
+    <div style="background:#ebf8ff;border-left:4px solid #3182ce;border-radius:8px;padding:1.2rem 1.5rem;margin-top:1.5rem;">
+      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#2b6cb0;margin-bottom:0.7rem;">Tổng kết DEV — COB 2026-06-26</div>
+      <p style="color:#2d3748;font-size:0.95rem;margin-bottom:0.6rem;">21/22 bảng thành công. Total wall time <strong>~10 phút 24 giây</strong> (20:15 → 20:26 ICT). Extract toàn bộ chỉ mất 10–13s/bảng vì dữ liệu nhỏ. Parse bị overhead Spark chiếm phần lớn thời gian (75–310s) dù data chỉ vài KB.</p>
+      <p style="color:#2d3748;font-size:0.95rem;"><strong>F_PL_CLOSE_DATES</strong>: parse fail — <code style="background:#edf2f7;padding:0.1rem 0.4rem;border-radius:3px;color:#c53030;">KeyError: table 'PL.CLOSE.DATES' not found in STANDARD.SELECTION</code>. Cần bổ sung schema vào ss_full.json.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ UAT ═══════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>UAT Environment</h2>
+      <span class="env-badge badge-uat">UAT</span>
+    </div>
+
+    <div class="meta-grid">
+      <div class="meta-card">
+        <div class="label">Run ID</div>
+        <div class="value" style="font-size:0.65rem">manual__2026-06-26T16:23:35_rRrcM6xa</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">COB</div>
+        <div class="value">2026-06-25</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Wall Time</div>
+        <div class="value" style="color:#b7791f;">~15.7h ⚠</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Storage</div>
+        <div class="value">HDD</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Row Cap</div>
+        <div class="value">None (full)</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Target</div>
+        <div class="value">hive.bronze.*</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Kết quả</div>
+        <div class="value" style="color:#c05621;">43✓ · 2✗ · 22↑fail</div>
+      </div>
+    </div>
+
+    <!-- Warning box -->
+    <div style="background:#fffaf0;border-left:4px solid #ed8936;border-radius:8px;padding:1rem 1.4rem;margin-bottom:1.5rem;font-size:0.92rem;color:#2d3748;">
+      <strong style="color:#c05621;">⚠ Wall time 15.7h KHÔNG phải thời gian xử lý thực.</strong> Thời gian thực mỗi job chỉ vài phút. Span dài do <strong>cụm bất ổn</strong>: kube-apiserver OOMKilled (RAM hết → restart liên tục) → Calico CNI timeout khi cấp IP cho executor pod → Spark executor không kết nối được driver → job fail → retry nhiều lần (tối đa 9 lần). Khi apiserver tạm ổn thì job pass ngay.
+    </div>
+
+    <!-- Spark Config UAT -->
+    <p style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#718096;margin-bottom:0.7rem;">Spark Configuration (Parse — UAT)</p>
+    <div class="config-grid">
+      <div class="config-item"><span class="k">Image</span><span class="v">spark-t24:build-156</span></div>
+      <div class="config-item"><span class="k">Driver CPU</span><span class="v">2 core / 2000m</span></div>
+      <div class="config-item"><span class="k">Driver RAM</span><span class="v">4 GB</span></div>
+      <div class="config-item"><span class="k">Executor</span><span class="v">2 × 2 cores</span></div>
+      <div class="config-item"><span class="k">Executor RAM</span><span class="v">6 GB each</span></div>
+      <div class="config-item"><span class="k">shuffle.partitions</span><span class="v">4</span></div>
+      <div class="config-item"><span class="k">Tổng / job</span><span class="v">6 core · 16 GB</span></div>
+      <div class="config-item"><span class="k">Pool slots</span><span class="v">3 job song song → ~18c · 48GB đỉnh</span></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>MSSQL Table</th>
+            <th>Hive Target (bronze)</th>
+            <th class="num">UAT Rows</th>
+            <th class="num">UAT Size</th>
+            <th class="num">Parse</th>
+            <th class="num">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="color:#718096;font-size:0.85rem;">1</td><td class="table-name">AAFBNK_AA508</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_aa_simulation_runner</td><td class="num">85,380</td><td class="num">0.15 GB</td><td class="num">~11m</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">2</td><td class="table-name">FBNK_MCB_GROUP</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_mcb_group</td><td class="num">140</td><td class="num">&lt;0.01 GB</td><td class="num">13m48s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">3</td><td class="table-name">F_EB_LOOKUP</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_eb_lookup</td><td class="num">2,257</td><td class="num">&lt;0.01 GB</td><td class="num">15m58s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">4</td><td class="table-name">F_CATEGORY</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_category</td><td class="num">1,030</td><td class="num">&lt;0.01 GB</td><td class="num">10m38s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">5</td><td class="table-name">FBNK_TRANSACTION</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_transaction</td><td class="num">881</td><td class="num">&lt;0.01 GB</td><td class="num">17m45s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">6</td><td class="table-name">F_DEPT_ACCT_OFFICER</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_dept_acct_officer</td><td class="num">518</td><td class="num">&lt;0.01 GB</td><td class="num">~9m</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">7</td><td class="table-name">F_USER</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_user</td><td class="num">501</td><td class="num">&lt;0.01 GB</td><td class="num">7m15s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">8</td><td class="table-name">F_BNCTL_CUS_VILL</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_bnctl_cus_vill</td><td class="num">493</td><td class="num">&lt;0.01 GB</td><td class="num">17m53s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">9</td><td class="table-name">FBNK_AA_PRODUCT</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_aa_product</td><td class="num">150</td><td class="num">&lt;0.01 GB</td><td class="num">4m36s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">10</td><td class="table-name">F_EB_SYSTEM_ID</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_eb_system_id</td><td class="num">121</td><td class="num">&lt;0.01 GB</td><td class="num">4m00s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">11</td><td class="table-name">F_BNCTL_CUS_SUBDIST</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_bnctl_cus_subdist</td><td class="num">72</td><td class="num">&lt;0.01 GB</td><td class="num">4m18s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">12</td><td class="table-name">F_ARCHIVE</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_archive</td><td class="num">59</td><td class="num">&lt;0.01 GB</td><td class="num">9m47s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">13</td><td class="table-name">F_POSTING_RESTRICT</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_posting_restrict</td><td class="num">29</td><td class="num">&lt;0.01 GB</td><td class="num">~10m</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">14</td><td class="table-name">F_COMPANY</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_company</td><td class="num">15</td><td class="num">&lt;0.01 GB</td><td class="num">10m35s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">15</td><td class="table-name">F_GIC_ID</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_gic_id</td><td class="num">15</td><td class="num">&lt;0.01 GB</td><td class="num">9m28s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">16</td><td class="table-name">F_MNEMONIC_COMPANY</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_mnemonic_company</td><td class="num">15</td><td class="num">&lt;0.01 GB</td><td class="num">9m38s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">17</td><td class="table-name">F_BNCTL_CUS_DIST</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_bnctl_cus_dist</td><td class="num">14</td><td class="num">&lt;0.01 GB</td><td class="num">6m12s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">18</td><td class="table-name">FBNK_CURRENCY</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_currency</td><td class="num">7</td><td class="num">&lt;0.01 GB</td><td class="num">4m36s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">19</td><td class="table-name">F_COMPANY_CONSOL</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_company_consol</td><td class="num">2</td><td class="num">&lt;0.01 GB</td><td class="num">9m52s</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr><td style="color:#718096;font-size:0.85rem;">20</td><td class="table-name">F_AC_STMT_PARAMETER</td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_ac_stmt_parameter</td><td class="num">1</td><td class="num">&lt;0.01 GB</td><td class="num">~4m</td><td style="color:#276749;text-align:center">✅</td></tr>
+          <tr style="background:#fff5f5;"><td style="color:#718096;font-size:0.85rem;">21</td><td class="table-name">F_PL_CLOSE_DATES<span class="tag tag-fail">FAILED</span></td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_pl_close_dates</td><td class="num">1</td><td class="num">&lt;0.01 GB</td><td class="fail">FAILED</td><td style="color:#c53030;text-align:center">❌</td></tr>
+          <tr style="background:#fff5f5;"><td style="color:#718096;font-size:0.85rem;">22</td><td class="table-name">F_COMPANY_SMS_GROUP<span class="tag tag-fail">FAILED</span></td><td style="font-family:monospace;font-size:0.82rem;color:#4a5568;">hive.bronze.t24_company_sms_group</td><td class="zero">0</td><td class="num">&lt;0.01 GB</td><td class="fail">FAILED</td><td style="color:#c53030;text-align:center">❌</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="legend" style="margin-top:1rem;">
+      <div class="legend-item"><div class="legend-dot" style="background:#c6f6d5;border:1px solid #38a169"></div>✅ parse success — seal tất cả upstream_failed do Dremio chết</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fc8181"></div>❌ parse failed (data/schema — xem lỗi bên dưới)</div>
+    </div>
+
+    <!-- UAT issues -->
+    <div style="background:#fff5f5;border-left:4px solid #fc8181;border-radius:8px;padding:1rem 1.4rem;margin-top:1.2rem;font-size:0.92rem;color:#2d3748;">
+      <strong style="color:#c53030;">Các lỗi trong run UAT:</strong>
+      <ul style="margin:0.6rem 0 0 1.2rem;line-height:2.2;">
+        <li><strong>Pod startup chậm (3–18m/bảng):</strong> kube-apiserver OOMKilled liên tục → Calico CNI không cấp được IP cho Spark executor pod → executor timeout kết nối về driver → job fail → retry. Khi apiserver tạm ổn thì job chạy bình thường trong vài phút.</li>
+        <li><strong>F_COMPANY_SMS_GROUP parse fail:</strong> bảng nguồn MSSQL rỗng (0 rows) → extract không ghi file nào lên MinIO → Spark báo PATH_NOT_FOUND.</li>
+        <li><strong>F_PL_CLOSE_DATES parse fail:</strong> schema <code>PL.CLOSE.DATES</code> không có trong ss_full.json (3749 bảng) → Spark không biết parse column nào. Cần bổ sung định nghĩa SS.</li>
+        <li><strong>22 seal upstream_failed:</strong> Dremio HTTP 500 <code>userGroup store not found</code> → toàn bộ seal chết theo. Cần DevOps fix Dremio.</li>
+      </ul>
+    </div>
+
+    <!-- UAT summary -->
+    <div style="background:#f0fff4;border-left:4px solid #38a169;border-radius:8px;padding:1.2rem 1.5rem;margin-top:1rem;">
+      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#276749;margin-bottom:0.7rem;">Tổng kết UAT — COB 2026-06-25</div>
+      <p style="color:#2d3748;font-size:0.95rem;margin-bottom:0.5rem;">20/22 parse success. Parse 4–18m/bảng — chậm hơn DEV vì HDD + cụm bất ổn buộc retry nhiều lần (tối đa 9 lần). Wall time 15.7h là outlier do hạ tầng, không phản ánh thời gian xử lý thực.</p>
+      <p style="color:#2d3748;font-size:0.95rem;">Khi cụm ổn định, toàn bộ pipeline (extract + parse 22 bảng) dự kiến hoàn thành trong <strong>~30–45 phút</strong>. Bảng reference nhỏ (&lt;0.15 GB), bottleneck là Spark overhead chứ không phải data size.</p>
+    </div>
+  </div>
+
+  <!-- Kết luận -->
+  <div class="eli10" style="border-left-color:#dd6b20;">
+    <h2 style="color:#c05621;">Kết luận</h2>
+    <p>Pipeline <strong>pull_bulk_fresh</strong> chạy thành công 21/22 bảng trên DEV (~10 phút, COB 2026-06-26) và 20/22 bảng trên UAT (COB 2026-06-25, wall time 15.7h do cụm bất ổn — thời gian thực ~30–45 phút).</p>
+    <p>Hai bảng cần fix trước run tiếp theo: <strong>F_PL_CLOSE_DATES</strong> (bổ sung schema vào ss_full.json) và <strong>F_COMPANY_SMS_GROUP</strong> (xác nhận nguồn rỗng hay chưa populate). Seal toàn bộ chờ DevOps fix Dremio (<code>userGroup</code> store error).</p>
+  </div>
+
+</div>
+</body>
+</html>

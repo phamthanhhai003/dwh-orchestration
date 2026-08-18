@@ -1,20 +1,22 @@
-venv/
-venv_airflow/
-logs/
-output/
-raw/
-graphify-out/
+.git/
 __pycache__/
 *.pyc
-.git/
-config
-AML_REPORTS/
-docs/
+.pytest_cache/
+venv/
+.venv/
+logs/
+target/
+dbt_packages/
 .claude/
-data_naming/
-data_seed/
-test_seed/
-temp/
+.qwen/
+
+# Credentials / local-only — không bao giờ vào image
+config
+import_table.py
+kafka/secret.yaml
+kafka/mssql-dev-secret.yaml
+spark/manifests/secret.yaml
+
+# Draft / scratch
 scripts/draft/
 scripts/mcp/
-spark-app/draft/

@@ -48,8 +48,12 @@ pipeline {
                 set -e
                 export PATH=/var/jenkins_home/miniconda/bin:$PATH
                 export DREMIO_HOST=localhost DREMIO_USER=dummy DREMIO_PASSWORD=dummy
-                for proj in T24_ACCOUNTING T24_CREDIT T24_OPERATIONAL T24_TREASURY; do
-                    cd ${WORKSPACE}/${proj} && dbt parse --profiles-dir . && echo "✅ ${proj}" && cd ${WORKSPACE}
+                for proj in T24_SILVER T24_ACCOUNTING T24_CREDIT T24_OPERATIONAL T24_AML T24_TREASURY COB_TEST; do
+                    cd ${WORKSPACE}/${proj}
+                    # T24_AML dùng dbt_utils.generate_surrogate_key -> phải deps trước khi parse
+                    if [ -f packages.yml ]; then dbt deps --profiles-dir .; fi
+                    dbt parse --profiles-dir . && echo "✅ ${proj}"
+                    cd ${WORKSPACE}
                 done
                 '''
             }

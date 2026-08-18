@@ -1,9 +1,0 @@
-# chart: spark-operator 2.5.0
-# repo: https://github.com/kubeflow/spark-operator
----
-spark:
-  jobNamespaces:
-  - bnctl-spark2-development-ns
-webhook:
-  enable: true
-

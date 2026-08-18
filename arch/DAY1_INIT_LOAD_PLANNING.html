@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Day 1 Init Load — Planning</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; font-size: 14px; color: #1a1a2e; background: #f4f6fb; }
+
+  .page { max-width: 1100px; margin: 0 auto; padding: 40px 32px; }
+
+  h1 { font-size: 26px; font-weight: 700; color: #0f3460; border-bottom: 3px solid #e94560; padding-bottom: 10px; margin-bottom: 6px; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 32px; }
+
+  h2 { font-size: 16px; font-weight: 700; color: #0f3460; margin: 32px 0 12px; padding-left: 10px; border-left: 4px solid #e94560; }
+  h3 { font-size: 14px; font-weight: 600; color: #16213e; margin: 20px 0 8px; }
+
+  .section { background: #fff; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #0f3460; color: #fff; padding: 8px 12px; text-align: left; font-weight: 600; }
+  td { padding: 7px 12px; border-bottom: 1px solid #eef0f5; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #f9fafc; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+  .badge-green  { background: #d4edda; color: #155724; }
+  .badge-red    { background: #f8d7da; color: #721c24; }
+  .badge-yellow { background: #fff3cd; color: #856404; }
+  .badge-blue   { background: #d1ecf1; color: #0c5460; }
+  .badge-gray   { background: #e2e3e5; color: #383d41; }
+
+  .recommend-box { background: #e8f4fd; border: 2px solid #1a73e8; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; }
+  .recommend-box .label { font-size: 11px; font-weight: 700; color: #1a73e8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .recommend-box p { color: #1a1a2e; font-size: 13px; line-height: 1.6; }
+
+  .flow-box { background: #1a1a2e; border-radius: 8px; padding: 16px 20px; font-family: 'Courier New', monospace; font-size: 12px; color: #a8d8a8; line-height: 1.7; overflow-x: auto; }
+  .flow-box .comment { color: #888; }
+  .flow-box .highlight { color: #ffd700; font-weight: bold; }
+
+  .phase { border-left: 3px solid #e94560; padding: 12px 16px; margin-bottom: 12px; background: #fff; border-radius: 0 6px 6px 0; }
+  .phase-label { font-size: 11px; font-weight: 700; color: #e94560; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .phase-title { font-size: 14px; font-weight: 700; color: #0f3460; margin-bottom: 6px; }
+  .phase-body { font-size: 13px; color: #444; line-height: 1.6; }
+
+  .risk-high   { color: #dc3545; font-weight: 700; }
+  .risk-mid    { color: #fd7e14; font-weight: 700; }
+  .risk-low    { color: #28a745; font-weight: 700; }
+
+  .check-list { list-style: none; padding: 0; }
+  .check-list li { padding: 5px 0; font-size: 13px; }
+  .check-list li::before { content: '☐ '; color: #e94560; font-size: 15px; }
+
+  .blank-section { background: #f8f9fa; border: 2px dashed #ced4da; border-radius: 8px; padding: 40px 24px; text-align: center; color: #adb5bd; font-size: 13px; }
+  .blank-section .icon { font-size: 32px; margin-bottom: 8px; }
+
+  .node-bar { display: flex; align-items: center; gap: 10px; margin: 4px 0; font-size: 12px; }
+  .node-bar-fill { height: 14px; border-radius: 3px; min-width: 4px; }
+  .bar-ok   { background: #28a745; }
+  .bar-warn { background: #fd7e14; }
+  .bar-crit { background: #dc3545; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+  .footer { text-align: center; color: #aaa; font-size: 11px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Day 1 Init Load — Planning Document</h1>
+  <div class="subtitle">Full snapshot T24 MSSQL → Hive Iceberg Bronze · Trước khi bật CDC streaming</div>
+
+  <!-- SCOPE -->
+  <h2>1. Phạm vi &amp; Quy mô</h2>
+  <div class="section">
+    <h3>Bảng giao dịch lớn (ưu tiên cao)</h3>
+    <table>
+      <tr><th>Bảng</th><th>Rows ước tính (prod)</th><th>Size ước tính</th><th>Index RECID</th></tr>
+      <tr><td>FBNK_STMT_ENTRY</td><td>~50–80M</td><td>~168 GB</td><td><span class="badge badge-green">Clustered PK</span></td></tr>
+      <tr><td>FBNK_STMT_ENTRY_DETAIL</td><td>~60–100M</td><td>~173 GB</td><td><span class="badge badge-green">Clustered PK</span></td></tr>
+      <tr><td>FBNK_CATEG_ENTRY</td><td>~50–80M</td><td>~145 GB</td><td><span class="badge badge-green">Clustered PK</span></td></tr>
+      <tr><td>FBNK_CATEG_ENTRY_DETAIL</td><td>~50–80M</td><td>~133 GB</td><td><span class="badge badge-green">Clustered PK</span></td></tr>
+      <tr><td>FBNK_AA_PROCESS_DETAILS</td><td>~10–20M</td><td>~35 GB</td><td><span class="badge badge-green">Clustered PK</span></td></tr>
+    </table>
+    <br>
+    <h3>Bảng master / reference (~25 bảng còn lại trong CDC)</h3>
+    <table>
+      <tr><th>Bảng</th><th>Rows ước tính</th><th>Ghi chú</th></tr>
+      <tr><td>FBNK_ACCOUNT_HIS</td><td>~20–50M</td><td>Append-only, lớn</td></tr>
+      <tr><td>FBNK_ACCOUNT</td><td>~5–10M</td><td></td></tr>
+      <tr><td>FBNK_FUNDS_TRANSFER</td><td>~10–30M</td><td></td></tr>
+      <tr><td>FBNK_CUSTOMER</td><td>~1–3M</td><td></td></tr>
+      <tr><td>FBNK_AA_ARR_ACCOUNT</td><td>~5–10M</td><td></td></tr>
+      <tr><td>~20 bảng nhỏ còn lại</td><td>~20–50M tổng</td><td></td></tr>
+    </table>
+    <br>
+    <div class="recommend-box">
+      <div class="label">Tổng quy mô</div>
+      <p><strong>~300–500 triệu rows · ~700GB–1TB raw XML</strong> — cần chạy qua đêm, tuần tự để tránh OOM cluster.</p>
+    </div>
+  </div>
+
+  <!-- SOLUTIONS COMPARISON -->
+  <h2>2. So Sánh Các Solution</h2>
+  <div class="section">
+    <table>
+      <tr>
+        <th>Tiêu chí</th>
+        <th>A — BCP Export ✅</th>
+        <th>B — Keyset JDBC</th>
+        <th>C — OFFSET/FETCH ❌</th>
+        <th>D — RECID List Batch</th>
+      </tr>
+      <tr>
+        <td>DB hits / table</td>
+        <td><strong>1 lần duy nhất</strong></td>
+        <td>N batch (~160 lần/bảng 80M)</td>
+        <td>N batch (chậm dần)</td>
+        <td>1 + N×M lần</td>
+      </tr>
+      <tr>
+        <td>DB load</td>
+        <td><span class="badge badge-green">Thấp nhất</span></td>
+        <td><span class="badge badge-green">Thấp</span> (index seek)</td>
+        <td><span class="badge badge-red">Cao</span></td>
+        <td><span class="badge badge-red">Cao</span></td>
+      </tr>
+      <tr>
+        <td>Stable với CDC inserts</td>
+        <td>✓ snapshot tại thời điểm T</td>
+        <td>✓ RECID T24 tăng dần</td>
+        <td><span class="badge badge-red">✗ OFFSET shift khi INSERT</span></td>
+        <td>✓</td>
+      </tr>
+      <tr>
+        <td>Cần Clustered PK RECID</td>
+        <td>Không</td>
+        <td>Có <span class="badge badge-green">✓ tất cả bảng đã có</span></td>
+        <td>Không</td>
+        <td>Không</td>
+      </tr>
+      <tr>
+        <td>Resume nếu fail</td>
+        <td>Partial (theo chunk parquet)</td>
+        <td><span class="badge badge-green">Tốt nhất — lưu last RECID</span></td>
+        <td>Không</td>
+        <td>Không</td>
+      </tr>
+      <tr>
+        <td>Throughput</td>
+        <td>Trung bình (single-thread)</td>
+        <td>Trung bình–Cao (index seek đều)</td>
+        <td>Chậm dần theo offset</td>
+        <td>Thấp (IN clause overhead)</td>
+      </tr>
+      <tr>
+        <td>Memory footprint</td>
+        <td><span class="badge badge-green">Thấp — stream chunk</span></td>
+        <td>Trung bình — per batch</td>
+        <td>Trung bình</td>
+        <td>Cao — lưu RECID list</td>
+      </tr>
+      <tr>
+        <td>Phức tạp impl</td>
+        <td>Thấp</td>
+        <td>Thấp</td>
+        <td>Thấp</td>
+        <td><span class="badge badge-red">Cao</span></td>
+      </tr>
+      <tr>
+        <td><strong>Verdict</strong></td>
+        <td><span class="badge badge-green">RECOMMENDED</span></td>
+        <td><span class="badge badge-blue">Viable alternative</span></td>
+        <td><span class="badge badge-red">Loại</span></td>
+        <td><span class="badge badge-gray">Không scale</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- DETAIL OPTIONS -->
+  <h2>3. Chi Tiết Từng Option</h2>
+  <div class="section">
+
+    <div class="two-col" style="margin-bottom:16px">
+      <div>
+        <h3>✅ Option A — BCP Bulk Export</h3>
+        <div class="flow-box">
+<span class="highlight">MSSQL</span>
+  └─ bcp queryout <span class="comment">(1 sequential scan)</span>
+        └─ TSV stream → pyarrow chunks
+              └─ parquet → <span class="highlight">MinIO</span> raw/t24/
+                    └─ Spark parse
+                          └─ <span class="highlight">Hive Iceberg Bronze</span>
+        </div>
+        <br>
+        <p style="font-size:12px;color:#555;line-height:1.6">
+          <strong>Pros:</strong> DB hit 1 lần duy nhất per table, disconnect sau khi xong. Memory thấp (~250MB/chunk, stream không buffer). Không bị ảnh hưởng bởi CDC inserts. Không cần index.<br><br>
+          <strong>Cons:</strong> Single-threaded per table. Cần <code>bcp</code> CLI (native SQL Server tool) trong môi trường chạy.
+        </p>
+      </div>
+      <div>
+        <h3>🔵 Option B — JDBC Keyset Pagination</h3>
+        <div class="flow-box">
+<span class="highlight">Spark JDBC</span>
+  └─ batch 1: <span class="comment">TOP 500K ORDER BY RECID</span>
+  └─ batch 2: <span class="comment">WHERE RECID > '{last_recid}'</span>
+  └─ batch N: <span class="comment">... cho đến hết</span>
+        └─ <span class="highlight">Hive Iceberg Bronze</span>
+        </div>
+        <br>
+        <p style="font-size:12px;color:#555;line-height:1.6">
+          <strong>Pros:</strong> Không cần tool ngoài. Clustered PK trên RECID → index seek, nhanh đều mọi batch. Checkpoint đơn giản (lưu last RECID), resume tốt nếu fail giữa chừng.<br><br>
+          <strong>Cons:</strong> DB bị hit N lần (~160 queries/bảng 80M rows). Load DB cao hơn BCP. Cần quản lý checkpoint state.
+        </p>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <h3>❌ Option C — OFFSET/FETCH</h3>
+        <div class="flow-box">
+<span class="highlight">Spark JDBC</span>
+  └─ <span class="comment">OFFSET 0 FETCH NEXT 500K</span>
+  └─ <span class="comment">OFFSET 500K FETCH NEXT 500K</span>
+  └─ <span class="comment">...</span>
+        └─ <span class="highlight">Hive Iceberg Bronze</span>
+        </div>
+        <br>
+        <p style="font-size:12px;color:#555;line-height:1.6">
+          <strong>Tại sao loại:</strong> CDC đang write liên tục → INSERT mới làm dịch chuyển OFFSET → miss hoặc duplicate rows giữa các batch. Ngoài ra OFFSET càng lớn MSSQL càng phải scan nhiều hơn từ đầu → chậm dần.
+        </p>
+      </div>
+      <div>
+        <h3>⚠️ Option D — RECID List Batch</h3>
+        <div class="flow-box">
+<span class="highlight">Step 1:</span> SELECT RECID FROM table
+         <span class="comment">→ lưu toàn bộ list</span>
+<span class="highlight">Step 2:</span> loop WHERE RECID IN
+         <span class="comment">(batch 1000 RECIDs)</span>
+        └─ <span class="highlight">Hive Iceberg Bronze</span>
+        </div>
+        <br>
+        <p style="font-size:12px;color:#555;line-height:1.6">
+          <strong>Tại sao không scale:</strong> Phải lưu hàng triệu RECID strings vào memory/file. IN clause N=1000 → hàng trăm nghìn round trips cho bảng 80M rows. Đọc DB 2 lần. Overhead không cần thiết khi Keyset đã xử lý tốt hơn.
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- IMPLEMENTATION PLAN -->
+  <h2>4. Implementation Plan (BCP)</h2>
+  <div class="section">
+
+    <div class="phase">
+      <div class="phase-label">Phase 0</div>
+      <div class="phase-title">Chuẩn bị — Trước Day 1</div>
+      <div class="phase-body">
+        Rebuild image <code>spark-t24:v5</code> với <code>mssql-tools</code> (bcp CLI) + <code>t24_bcp_extract.py</code>.<br>
+        Test pipeline BCP end-to-end trên testdb với 1 bảng nhỏ.<br>
+        Verify MinIO còn trống ≥ 1TB.<br>
+        Cập nhật Debezium connector: <code>snapshot.mode: schema_only</code>.<br>
+        Xác nhận maintenance window (chạy đêm, ~12–18h).
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-label">Phase 1</div>
+      <div class="phase-title">Ghi LSN Checkpoint</div>
+      <div class="phase-body">
+        Trước khi BCP bắt đầu, ghi LSN hiện tại của MSSQL:<br>
+        <code>SELECT sys.fn_cdc_get_max_lsn() AS snapshot_lsn;</code><br>
+        Debezium sẽ stream changes từ LSN này về sau → không duplicate với data BCP.
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-label">Phase 2</div>
+      <div class="phase-title">BCP Init Load — Chạy tuần tự qua đêm</div>
+      <div class="phase-body">
+        <table>
+          <tr><th>Thứ tự</th><th>Bảng</th><th>Rows (testdb)</th><th>Extract duration</th><th>Airflow task</th><th>Est. prod</th></tr>
+          <tr><td>1</td><td>FBNK_AA_PROCESS_DETAILS</td><td>100,000</td><td>23s</td><td>extract_aa-process-details</td><td>~30–45 phút</td></tr>
+          <tr><td>2</td><td>FBNK_CATEG_ENTRY</td><td>100,000</td><td>26s</td><td>extract_categ-entry</td><td>~2–3 giờ</td></tr>
+          <tr><td>3</td><td>FBNK_CATEG_ENTRY_DETAIL</td><td>100,000</td><td>25s</td><td>extract_categ-entry-detail</td><td>~2–3 giờ</td></tr>
+          <tr><td>4</td><td>FBNK_STMT_ENTRY</td><td>100,000</td><td>25s</td><td>extract_stmt-entry</td><td>~2–3 giờ</td></tr>
+          <tr><td>5</td><td>FBNK_STMT_ENTRY_DETAIL</td><td>100,000</td><td>27s</td><td>extract_stmt-entry-detail</td><td>~2–3 giờ</td></tr>
+          <tr><td>6</td><td>~25 bảng còn lại (CDC)</td><td>—</td><td>—</td><td>—</td><td>~3–4 giờ</td></tr>
+          <tr>
+            <td colspan="3"><strong>Avg extract (BCP, 100K rows)</strong></td>
+            <td><strong>~25s</strong></td>
+            <td colspan="2" style="color:#888;font-size:12px">DAG run: manual__2026-06-23T11:29:23 · Note: failed do bcp binary missing trong image — duration = thời gian đến lúc crash, chưa phải throughput thực</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-label">Phase 3</div>
+      <div class="phase-title">Verify Bronze</div>
+      <div class="phase-body">
+        Sau khi parse xong từng bảng, đối soát row count giữa MSSQL và Hive Bronze.<br>
+        Chênh lệch chấp nhận được: ≤ số rows INSERT trong khoảng thời gian BCP (CDC sẽ bù sau).
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-label">Phase 4</div>
+      <div class="phase-title">Bật CDC từ LSN Checkpoint</div>
+      <div class="phase-body">
+        Cập nhật Debezium connector với <code>snapshot.mode: schema_only</code>.<br>
+        Debezium stream changes từ LSN đã ghi Phase 1 → Bronze nhận incremental updates.<br>
+        Init load hoàn tất, pipeline CDC chạy bình thường.
+      </div>
+    </div>
+  </div>
+
+  <!-- PERFORMANCE -->
+  <h2>5. Performance Thực Tế — BCP vs JDBC (testdb 100K rows/bảng)</h2>
+  <div class="section">
+    <div class="recommend-box" style="margin-bottom:16px">
+      <div class="label">Kết luận</div>
+      <p><strong>BCP nhanh hơn JDBC ~2.7×</strong> trên cùng 100K rows · BCP avg <strong>25s</strong> · JDBC avg <strong>68s</strong> · Chênh lệch sẽ kéo dài hơn ở prod (80M+ rows) do JDBC phải open nhiều partition connection.</p>
+    </div>
+    <table>
+      <tr>
+        <th>Bảng</th>
+        <th>Rows (testdb)</th>
+        <th>BCP — pull_bulk<br><span style="font-weight:400;font-size:11px">manual__2026-06-23T11:29:23</span></th>
+        <th>JDBC — pull_jdbc<br><span style="font-weight:400;font-size:11px">manual__2026-06-24T02:01:04</span></th>
+        <th>BCP faster by</th>
+      </tr>
+      <tr>
+        <td>FBNK_CATEG_ENTRY</td><td>100,000</td>
+        <td><span class="badge badge-green">26s</span></td>
+        <td><span class="badge badge-yellow">62s</span></td>
+        <td>2.4×</td>
+      </tr>
+      <tr>
+        <td>FBNK_STMT_ENTRY_DETAIL</td><td>100,000</td>
+        <td><span class="badge badge-green">27s</span></td>
+        <td><span class="badge badge-yellow">80s</span></td>
+        <td>3.0×</td>
+      </tr>
+      <tr>
+        <td>FBNK_STMT_ENTRY</td><td>100,000</td>
+        <td><span class="badge badge-green">25s</span></td>
+        <td><span class="badge badge-yellow">61s</span></td>
+        <td>2.4×</td>
+      </tr>
+      <tr>
+        <td>FBNK_CATEG_ENTRY_DETAIL</td><td>100,000</td>
+        <td><span class="badge badge-green">25s</span></td>
+        <td><span class="badge badge-yellow">56s</span></td>
+        <td>2.2×</td>
+      </tr>
+      <tr>
+        <td>FBNK_AA_PROCESS_DETAILS</td><td>100,000</td>
+        <td><span class="badge badge-green">23s</span></td>
+        <td><span class="badge badge-yellow">80s</span></td>
+        <td>3.5×</td>
+      </tr>
+      <tr style="background:#f0f4ff">
+        <td><strong>Avg</strong></td><td>100,000</td>
+        <td><strong>~25s</strong></td>
+        <td><strong>~68s</strong></td>
+        <td><strong>~2.7×</strong></td>
+      </tr>
+    </table>
+    <p style="font-size:12px;color:#888;margin-top:10px">
+      BCP run: image <code>spark-t24:build-156</code> · extract success, parse success ✅<br>
+      JDBC run: image <code>spark-t24:build-156</code> · Spark JDBC full scan, 2 executor cores · extract success ✅<br>
+      Cả hai: <code>hive.test.*</code>, MinIO <code>raw/test_bulk/</code> vs <code>raw/test_jdbc/</code>
+    </p>
+    <br>
+    <div class="blank-section" style="padding:20px">
+      <strong>Throughput prod (UAT row count) — để trống, điền sau khi chạy trên data thực</strong><br><br>
+      Cần ghi nhận: MB/s BCP, thời gian per bảng ở ~80M rows, memory peak, MSSQL vs Bronze row count match.
+    </div>
+  </div>
+
+  <!-- CLUSTER -->
+  <h2>6. Cluster Constraints</h2>
+  <div class="section">
+    <table>
+      <tr><th>Node</th><th>CPU</th><th>RAM</th><th>RAM actual%</th><th>RAM limit%</th><th>Ghi chú</th></tr>
+      <tr>
+        <td>worker-00</td><td>18c</td><td>24GB</td>
+        <td>64%</td>
+        <td><span class="badge badge-yellow">113%</span></td>
+        <td>control-plane + worker</td>
+      </tr>
+      <tr>
+        <td>worker-01</td><td>18c</td><td>20GB</td>
+        <td>57%</td>
+        <td><span class="badge badge-red">163%</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>worker-02</td><td>18c</td><td>20GB</td>
+        <td>55%</td>
+        <td><span class="badge badge-red">144%</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><strong>worker-03</strong></td><td>18c</td><td>20GB</td>
+        <td><span class="badge badge-green">39%</span></td>
+        <td><span class="badge badge-red">147%</span></td>
+        <td><strong>→ Target cho BCP jobs</strong></td>
+      </tr>
+      <tr>
+        <td>master-02</td><td>8c</td><td>16GB</td>
+        <td>38%</td>
+        <td><span class="badge badge-green">OK</span></td>
+        <td>SchedulingDisabled</td>
+      </tr>
+    </table>
+    <br>
+    <p style="font-size:13px;color:#555">
+      ⚠️ Tất cả worker nodes đang <strong>overcommit RAM ở limit</strong> — nếu các pod đồng loạt hit limit sẽ xảy ra OOMKill cascade.<br>
+      Khuyến nghị: chạy <strong>tuần tự</strong> (không parallel), pin Spark jobs vào <strong>worker-03</strong> (RAM actual thấp nhất), schedule ngoài giờ hành chính.
+    </p>
+  </div>
+
+  <!-- RISK -->
+  <h2>7. Risk &amp; Mitigation</h2>
+  <div class="section">
+    <table>
+      <tr><th>Risk</th><th>Mức độ</th><th>Mitigation</th></tr>
+      <tr>
+        <td>OOMKill Spark pod</td>
+        <td><span class="risk-high">Cao</span></td>
+        <td>Chạy tuần tự, pin worker-03, giảm executor memory nếu cần</td>
+      </tr>
+      <tr>
+        <td>BCP ngắt giữa chừng</td>
+        <td><span class="risk-mid">Trung bình</span></td>
+        <td>Re-trigger DAG cho bảng đó (idempotent: overwrite parquet)</td>
+      </tr>
+      <tr>
+        <td>MinIO hết dung lượng</td>
+        <td><span class="risk-mid">Trung bình</span></td>
+        <td>Check free space trước, xóa raw sau khi parse xong từng bảng</td>
+      </tr>
+      <tr>
+        <td>LSN gap — miss changes</td>
+        <td><span class="risk-low">Thấp</span></td>
+        <td>Ghi LSN trước khi BCP bắt đầu bảng đầu tiên</td>
+      </tr>
+      <tr>
+        <td>CDC duplicate với BCP data</td>
+        <td><span class="risk-low">Thấp</span></td>
+        <td>Debezium <code>snapshot.mode: schema_only</code> + start from snapshot LSN</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- ACTION ITEMS -->
+  <h2>8. Action Items</h2>
+  <div class="section">
+    <ul class="check-list">
+      <li>Build image <code>spark-t24:v5</code> với <code>mssql-tools</code> (bcp CLI)</li>
+      <li>Update <code>t24_bcp_extract.yaml</code>: đổi image tag → <code>v5</code></li>
+      <li>Test BCP pipeline end-to-end trên testdb (1 bảng nhỏ)</li>
+      <li>Confirm MinIO free capacity ≥ 1TB trước Day 1</li>
+      <li>Update Debezium connector: <code>snapshot.mode: schema_only</code></li>
+      <li>Script ghi LSN trước khi bắt đầu BCP</li>
+      <li>Schedule maintenance window — chạy đêm ~12–18h</li>
+      <li>Verify row count Bronze vs MSSQL sau khi hoàn tất</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    BNCTL DWH Team · Generated 2026-06-23 · arch/DAY1_INIT_LOAD_PLANNING.html
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,8 +1,0 @@
-# chart: jenkins 5.8.93
----
-controller:
-  initContainerEnv:
-  - name: JENKINS_UC_DOWNLOAD
-    value: https://updates.jenkins.io
-  installPlugins: false
-

@@ -1,232 +1,234 @@
-# Airflow ETL Orchestration Platform
+# BNCTL DWH — Orchestration & Transformation
 
-Apache Airflow-based data orchestration system for T24 banking data pipeline with multi-stage processing (sync → parse → model).
+Pipeline dữ liệu **COB (Close of Business)** cho core banking Temenos T24: đưa dữ liệu từ MSSQL và
+SFTP vào Hive Iceberg, gate theo chu kỳ COB thật của T24, rồi build lên Silver data mart và Gold
+report phục vụ 5 nghiệp vụ — Accounting, Credit, AML, Operational, Treasury.
 
-## 📋 Overview
+> 📐 **[Tài liệu kiến trúc đầy đủ → `arch/BNCTL_DWH_System_Architecture.md`](arch/BNCTL_DWH_System_Architecture.md)**
+>
+> 🏗️ Tầng hạ tầng K8s (Kafka/Strimzi, MinIO, Dremio, Hive Metastore, Airflow, Jenkins, ELK) ở repo
+> riêng: **[dwh-deployments](https://github.com/phamthanhhai003/dwh-deployments)**
 
-**Purpose:** Automated daily/hourly data import from T24 banking system via SFTP → Processing (parse/transform) → Publication to BI/Reporting
+---
 
-**Tech Stack:**
-- Apache Airflow 2.x (orchestration)
-- Apache Spark 3.5.1 (distributed file sync)
-- dbt (data transformation, modeling)
-- PostgreSQL (ETL logging & state management)
-- MinIO (object storage for intermediate data)
-- Apache Iceberg (OLAP table format)
-- Kubernetes (Spark execution)
+## Bài toán
 
-## 🏗️ Architecture
+T24 chạy COB mỗi đêm. Trong lúc COB chạy, bảng nghiệp vụ vẫn biến động và CDC stream vẫn nhận
+event — nếu dbt model đọc Bronze ở thời điểm tuỳ ý thì báo cáo ngày D có thể lẫn giao dịch ngày
+D+1, và chạy lại 2 lần ra 2 kết quả khác nhau.
 
-### Active Pipelines (5)
+Pipeline này giải quyết bằng 3 nguyên tắc:
 
-| Pipeline | Trigger | Data Source | Processing | Output |
-|----------|---------|-------------|-----------|--------|
-| **Credit** | Daily manual | SFTP `/FromT24/CREDIT/` | Spark parse + dbt model | Iceberg + Gold reports |
-| **Treasury Remittance** | Daily manual | SFTP `/FromT24/TREASURY/` (CSV) | No-op parser + dbt model | Remittance reports |
-| **Treasury Liquidity** | Daily manual | Accounting model output | dbt model only (depends on accounting) | Liquidity analysis |
-| **AML V2** | Manual trigger OR hourly | SFTP `/DW.EXPORT/AML/` | Local Python parsers (5 report types) + publish to PBIRS | PBIRS dashboards |
-| **CRB Deposits** | Manual trigger | MinIO `raw/crb/` (CRB fixed-width) | Spark parse → Iceberg bronze | `hive.bronze.crb_deposits` |
+| Nguyên tắc | Cách làm |
+|---|---|
+| **`business_date` từ marker thật, không từ lịch** | Đọc record `BNK/COB.INITIALISE` trong `hive.bronze.t24_batch`; `process_status = 0` ⟹ COB xong. Một hàm `cob_marker.cob_done()` dùng chung mọi DAG. |
+| **Seal trước, đọc sau** | Nguồn nào xong cho ngày D thì `sealed` vào Postgres `etl_control`. Model chỉ chạy khi *đúng source-set của nó* sealed — không chờ thừa, không chạy sớm. |
+| **Ghim snapshot thay vì khoá bảng** | Seal luồng CDC kèm `iceberg_snapshot_id`; dbt đọc `AT SNAPSHOT '{{ var("snap_x") }}'`. Kết quả tái lập được, CDC vẫn ghi tiếp bình thường. |
 
-### Data Flow Pattern (All Pipelines)
+---
+
+## Kiến trúc
+
 ```
-[Extract Date Range] → [Sync SFTP→MinIO] → [Detect Candidates] → [Insert Logs] → [Parse/Model] → [Update Logs]
+T24 MSSQL ──┬─ CDC (25 bảng)  Debezium → Kafka → Spark Streaming ──┐
+            └─ PULL (9 bảng)  bcp → MinIO → Spark batch parse ─────┤
+SFTP HOLD ───  5 report CRF/CRB/CRC, manifest-driven fetch ────────┤
+                                                                   ▼
+                                        BRONZE  hive.bronze.*  (Iceberg / MinIO)
+                                                   │  cob_gate: seal + pin snapshot
+                                                   ▼
+                                        SILVER  hive.silver.t24_*   11 ENQ mart
+                                                   ▼
+                                        GOLD    hive.gold.*         41 report models
+                                                   ▼
+                                             Dremio → BI
 ```
 
-## 🚀 Quick Start
+| | Con số |
+|---|---|
+| Airflow DAG | 14 objects từ 9 file (3 ingest · 1 silver · 6 gold factory · 4 ops/benchmark) |
+| Bảng T24 ingest | 25 CDC · 9 pull · 5 report SFTP |
+| dbt model | 11 silver ENQ + 41 gold model, 6 project |
+| Bảng control | 4 (`etl_control`, `etl_model_runs`, `etl_stream_progress`, `etl_ingest_logs`) |
 
-### Manual Pipeline Trigger
+---
+
+## Stack
+
+Apache Airflow 3.0.2 · Spark 3.5.1 (Structured Streaming + batch, Spark Operator trên K8s) ·
+Apache Iceberg trên MinIO S3A với Hive Metastore catalog · Dremio · dbt (`dbt-dremio`) ·
+Debezium + Kafka (Strimzi KRaft) · PostgreSQL · Jenkins + Kaniko
+
+---
+
+## Cấu trúc repo
+
+```
+dags/                        Airflow DAG
+├── cob_gate_dag.py            INGEST · sensor COB-done → caught-up 25 bảng CDC → pin + seal
+├── pull_cob_dag.py            INGEST · bcp extract 9 bảng reference → parse → seal
+├── sftp_hold_dag.py           INGEST · manifest-driven fetch 5 report CRF/CRB/CRC → seal
+├── build_mart_dag.py          BUILD  · fan-out 11 nhánh → hive.silver.t24_*
+├── dbt_model_cob_dag.py       BUILD  · factory sinh 6 DAG gold từ DOMAIN_CONFIGS
+├── pull_bulk_dag.py           OPS    · BCP bulk 36 bảng CDC (Day-1 init / benchmark)
+├── pull_bulk_fresh_dag.py     OPS    · BCP full snapshot 22 bảng reference
+├── pull_jdbc_dag.py           OPS    · đối chứng Spark JDBC vs BCP
+├── t24_pull_pipeline_dag.py   OPS    · JDBC pull thủ công, initial load / recovery
+└── lib/
+    ├── cob_marker.py          nguồn chân lý DUY NHẤT cho business_date
+    ├── etl_control.py         API gate: open_pending / seal / all_sealed / all_enqs_built
+    ├── enq_sources.py         map ENQ → source-set; derive cdc_union() và pull_union()
+    ├── kafka_lag.py           lag nhánh B: kafka_end_offset − spark_committed_offset
+    └── dremio.py              Dremio REST: login / query / refresh / latest_snapshot_id
+
+libs/t24_parser/             Parser XMLRECORD metadata-driven (21 unit test)
+├── metadata.py                STANDARD.SELECTION → TableSpec
+├── core.py                    parse(df, spec) — pure transform, dùng chung CDC + batch
+└── sinks.py                   latest_per_recid / split_deletes / write_bronze (idempotent)
+
+jobs/                        Entrypoint chạy trong Spark image
+├── t24_streaming_cdc.py       Kafka → foreachBatch(parse) → MERGE Bronze → etl_stream_progress
+├── t24_batch_parse.py         Parquet raw → parse → Bronze
+└── t24_bcp_extract.py         bcp queryout → pyarrow → Parquet → MinIO
+
+T24_SILVER/                  dbt · 11 ENQ data mart  → hive.silver
+T24_ACCOUNTING/              dbt · 22 model (+10 seed CSV)  ┐
+T24_CREDIT/                  dbt · 7 model                  │
+T24_OPERATIONAL/             dbt · 6 model                  ├─ → hive.gold
+T24_AML/                     dbt · 4 model                  │
+T24_TREASURY/                dbt · 2 model                  ┘
+COB_TEST/                    dbt · demo E2E (mix cả 3 luồng CDC + pull + sftp)
+
+spark-app/                   SparkApplication YAML (extract / parser / sync)
+spark/                       Dockerfile.t24 + manifest streaming CDC
+kafka/                       Strimzi cluster + Kafka Connect + Debezium MSSQL connector
+scripts/cob_pipeline/        DDL bảng control Postgres (idempotent)
+arch/                        Tài liệu kiến trúc + báo cáo hiệu năng
+dev.Jenkinsfile              CI/CD: dbt lint → Kaniko build → rollout Airflow
+```
+
+---
+
+## Thêm nghiệp vụ mới — config-driven
+
+Không phải sửa DAG code:
+
+| Muốn thêm | Sửa đúng 1 chỗ |
+|---|---|
+| Silver ENQ mới | 1 entry `enq_sources.ENQ_SOURCES` + 1 file `T24_SILVER/models/<enq>.sql` |
+| Gold report / division mới | 1 dict `dbt_model_cob_dag.DOMAIN_CONFIGS` + dbt project |
+| Bảng pull mới | append vào `pull_cob.TABLES` |
+| Bảng CDC mới | append vào `cob_gate.CDC_SOURCES` |
+
+`enq_sources.py` tự derive `cdc_union()` (25 bảng cob_gate phải gate + pin) và `pull_union()`
+(9 bảng pull_cob phải extract) từ khai báo ENQ — không maintain 2 list song song. Có
+`_validate()` chống lệch classification CDC/pull:
 
 ```bash
-# Trigger with date range (JSON parameters)
-airflow dags trigger credit_pipeline_parser_dag \
-  --conf '{"START_DATE":"2026-04-01","END_DATE":"2026-04-01"}'
-
-# Trigger AML V2 for specific dates
-airflow dags trigger aml_v2_pipeline \
-  --conf '{"START_DATE":"2026-04-01","END_DATE":"2026-04-03"}'
-
-# Trigger without params (uses auto-detect: execution_date or current date)
-airflow dags trigger treasury_remittance_pipeline_dag
+python dags/lib/enq_sources.py       # VALIDATION: OK + in ra union
 ```
 
-## 📁 Project Structure
+Hướng dẫn từng bước: [`arch/ADD_DBT_MODEL_TO_COB.md`](arch/ADD_DBT_MODEL_TO_COB.md)
 
-```
-.
-├── dags/                              # Airflow DAG definitions
-│   ├── credit_pipeline_parser_dag.py
-│   ├── treasury_remittance_pipeline_dag.py
-│   ├── treasury_remittance_model_dag.py
-│   ├── treasury_liquidity_model_dag.py
-│   └── aml_v2_pipeline_dag.py
-│
-├── scripts/sync/                      # Spark sync scripts (SFTP → MinIO)
-│   ├── credit_sync_spark.py
-│   ├── aml_v2_sync_spark.py
-│   ├── treasury_remittance_sync_spark.py
-│   └── (others)
-│
-├── scripts/parser/                    # Spark parser scripts (raw → Iceberg bronze)
-│   ├── accounting_parser_spark.py
-│   ├── crb_deposits_parser.py         # CRB GL Balance Details → hive.bronze.crb_deposits
-│   └── (others)
-│
-├── spark-app/sync/                    # Spark job YAML configs (sync jobs)
-│   ├── credit_sync_spark.yaml
-│   ├── aml_v2_sync_spark.yaml
-│   └── (others)
-│
-├── spark-app/parser/                  # Spark job YAML configs (parser jobs)
-│   ├── accounting_parser_spark.yaml
-│   ├── crb_deposits_parser_spark.yaml # CRB deposits parser job
-│   └── (others)
-│
-├── ACCOUNTING_REPORTS/                # dbt project (accounting)
-├── CREDIT_REPORTS/                    # dbt project (credit)
-├── TREASURY_REPORTS/                  # dbt project (treasury)
-├── AML_REPORTS_V2/                    # Python parsers (5 report types)
-│   ├── parser_9k.py
-│   ├── parser_aml03.py
-│   ├── parser_aml05.py
-│   ├── parser_aot.py
-│   ├── parser_fcm.py
-│   └── push_to_pbirs.py              # Publish to BI system
-│
-├── DATABASE_SCHEMA.md                 # PostgreSQL DDL for all tracking tables
-├── DATA_FLOW_GUIDE.md                 # Detailed data flow per pipeline
-├── SFTP_FOLDER_STRUCTURE.md           # SFTP path conventions
-├── SFTP_STRUCTURE_EXAMPLES.md         # Real data examples
-└── PIPELINE_IMPLEMENTATION_GUIDE.md   # Architecture patterns & best practices
-```
+---
 
-## ⚙️ Configuration
+## Vận hành
 
-### Required Airflow Variables
+Mọi DAG đều `schedule=None` và neo theo marker COB (production gắn cron cho `cob_gate`).
 
 ```bash
-# SFTP Configuration
-SFTP_HOST="t24-server.company.com"
-SFTP_USER="etl_user"
-SFTP_PASS="secure_password"
+# Chạy COB bình thường — cob_gate tự phát hiện D từ marker T24
+airflow dags trigger cob_gate
 
-# MinIO Configuration
-MINIO_ENDPOINT="10.0.40.121:9000"        # ⚠️ HOST:PORT ONLY (no protocol/path)
-MINIO_ACCESS_KEY="minioadmin"
-MINIO_SECRET_KEY="minioadmin"
-MINIO_SECURE="False"
+# Replay / rebuild 1 ngày cụ thể: bỏ qua marker + bỏ idempotent guard
+airflow dags trigger dbt_aml -c '{"business_date":"2026-06-25"}'
 
-# Kubernetes
-SPARK_NAMESPACE="spark-jobs"
+# Kiểm tra gate: nguồn nào đã sealed cho D
+psql -d cob_control -c "
+  SELECT source_table, flow, status, iceberg_snapshot_id
+  FROM etl_control WHERE business_date = '2026-06-25' ORDER BY flow, source_table;"
 
-# PBIRS (Power BI Reporting Services) - AML V2 only
-PBIRS_BASE_URL="http://10.0.40.121/reports"
-PBIRS_USERNAME="pbirs_user"
-PBIRS_PASSWORD="secure_password"
+# Kiểm tra silver/gold đã build chưa
+psql -d cob_control -c "
+  SELECT domain, enq_name, layer, status, models_built
+  FROM etl_model_runs WHERE business_date = '2026-06-25';"
 ```
 
-### Required PostgreSQL Tables
+Chạy dbt tay:
 
-Run all `CREATE TABLE` statements from `DATABASE_SCHEMA.md`:
 ```bash
-psql -U airflow_user -d airflow_db -f /path/to/DATABASE_SCHEMA.md
+cd T24_SILVER
+dbt run --select t24_daily_txn_9k \
+  --vars '{"business_date":"2026-06-25","snap_account":"7215384021"}' --target dev
 ```
 
-Tables include:
-- `etl_parsed_logs_*` (sync/parse status per pipeline)
-- `etl_model_logs_*` (dbt model build status per pipeline)
+Test parser:
 
-## 📊 Data Flow Examples
-
-### Credit Pipeline (Daily)
-```
-SFTP: /FromT24/CREDIT/2026-04-01/*.csv
-  ↓ (sync via Spark)
-MinIO: s3a://raw/credit/2026-04-01/ + _SUCCESS marker
-  ↓ (detect → parse)
-Iceberg: hive.bronze.credit__* (3 tables)
-  ↓ (dbt model)
-Iceberg: hive.silver.credit__* + hive.gold.credit_reports
-  ↓ (update logs)
-PostgreSQL: etl_parsed_logs_credit, etl_model_logs_credit
-```
-
-### CRB Deposits Parser
-```
-MinIO: s3a://raw/crb/{filename}   ← upload file CRB thủ công per branch
-  ↓ (Spark parse)
-Iceberg: hive.bronze.crb_deposits (partitioned by load_date)
-  - deposit_type: demand / time / passbook
-  - gl_line: 4310, 4320, 4340, 4410, 4450–4520
-  - account_number, branch_code, branch_name, product_code, product_name
-  - local_ccy_amt, int_rate, value_date, mat_date
-  - 2-tier reconciliation: per GL section vs TOTAL FOR + group totals
-```
-
-**Required Airflow Variables (CRB):**
-```
-SPARK_CRB_PARSER_DRIVER_CORES, SPARK_CRB_PARSER_DRIVER_CORE_REQUEST
-SPARK_CRB_PARSER_DRIVER_CORE_LIMIT, SPARK_CRB_PARSER_DRIVER_MEMORY
-SPARK_CRB_PARSER_EXECUTOR_CORES, SPARK_CRB_PARSER_EXECUTOR_CORE_REQUEST
-SPARK_CRB_PARSER_EXECUTOR_CORE_LIMIT, SPARK_CRB_PARSER_EXECUTOR_INSTANCES
-SPARK_CRB_PARSER_EXECUTOR_MEMORY
-```
-
-### AML V2 Pipeline (Manual Trigger)
-```
-Manual trigger: airflow dags trigger aml_v2_pipeline --conf '{"START_DATE":"...", "END_DATE":"..."}'
-  ↓ (sync via Spark)
-SFTP: /DW.EXPORT/AML/2026-04-01/{9k,aml03,aml05,aot,fcm}.xlsx
-  ↓
-MinIO: s3a://raw/aml_input/2026-04-01/ + _SUCCESS marker
-  ↓ (detect → local Python parser)
-5 report types (9k, aml03, aml05, aot, fcm) → MinIO: s3a://raw/aml_output/2026-04-01/
-  ↓ (push to PBIRS)
-PBIRS Dashboards (/reports/powerbi/...)
-  ↓ (update logs)
-PostgreSQL: etl_parse_logs_aml_v2, etl_publish_logs_aml_v2
-```
-
-## 📖 Documentation
-
-- **[libs/t24_parser/README.md](libs/t24_parser/README.md)** ⭐ **T24 XMLRECORD Parser Tool (kiến trúc v1.4 — DB-only sourcing)**
-  - Parser metadata-driven cho MỌI bảng T24 (RECID+XMLRECORD → Bronze Iceberg typed/arrays)
-  - Dùng chung cho CDC streaming (Debezium→Kafka→Spark) và JDBC pull; e2e 20/20 + verify 8K so sánh
-  - ⚠️ Các pipeline SFTP bên dưới thuộc kiến trúc CŨ (v1.2/v1.3) — đang được thay thế dần theo `arch/BNCTL_DWH_System_Architecture.md`
-
-- **[PIPELINE_IMPLEMENTATION_GUIDE.md](PIPELINE_IMPLEMENTATION_GUIDE.md)** ← START HERE
-  - Architecture patterns, Airflow 2.x best practices, date range filtering, error handling
-  
-- **[DATA_FLOW_GUIDE.md](DATA_FLOW_GUIDE.md)**
-  - Detailed flow per pipeline with real examples
-  
-- **[SFTP_FOLDER_STRUCTURE.md](SFTP_FOLDER_STRUCTURE.md)**
-  - SFTP directory conventions and file naming
-  
-- **[DATABASE_SCHEMA.md](DATABASE_SCHEMA.md)**
-  - All PostgreSQL DDL for ETL logging tables
-
-## 🔍 Debugging
-
-### Check DAG Status
 ```bash
-airflow dags list
-airflow dags test credit_pipeline_parser_dag 2026-04-01
+cd libs/t24_parser && pip install -e '.[dev]' && pytest -m 'not spark'
 ```
 
-### View Task Logs
+Runbook E2E: [`arch/COB_E2E_TEST_RUNBOOK.md`](arch/COB_E2E_TEST_RUNBOOK.md) ·
+Replay: [`arch/REPLAY_RERUN_GUIDE.html`](arch/REPLAY_RERUN_GUIDE.html)
+
+---
+
+## Hiệu năng (đo thật)
+
+**BCP vs Spark JDBC — extract 100K rows:** `~25s` vs `~68s`, và BCP dùng **0 executor pod**
+(1 pod 1 core / 2GB) thay vì 2. Đánh đổi: BCP giữ shared lock khi scan.
+→ [`arch/BCP_vs_JDBC_deep_dive.html`](arch/BCP_vs_JDBC_deep_dive.html)
+
+**`pull_bulk` — 36 bảng CDC, DEV (cap 100K rows/bảng):** bottleneck là parse chứ không phải
+extract, chi phối bởi XML size/row.
+
+| Bảng | Rows | Size est | Extract | Parse |
+|---|---:|---:|---:|---:|
+| AAFBNK_AA010 (AA.ACTIVITY.HISTORY) | 100,000 | 4,361 MB | 360s | 4,517s |
+| FBNK_ACCOUNT | 100,000 | 1,849 MB | 331s | 3,744s |
+| FBNK_CUSTOMER | 100,000 | 496 MB | 24s | 1,492s |
+
+**UAT (full data):** `FBNK_AA_PROCESS_DETAILS` 22.8M rows / 46 GB extract ~93 phút;
+`FBNK_CUSTOMER` 619K rows / 3 GB parse ~1h38m.
+
+**`pull_bulk_fresh` — 22 bảng reference, DEV:** 21/22 thành công, wall time **~10m24s**. Spark
+submit overhead chiếm ~60–70s/bảng ngay cả với bảng 0 rows.
+
+Chi tiết: [`arch/BCP_PIPELINE_REPORT.html`](arch/BCP_PIPELINE_REPORT.html) ·
+[`arch/BCP_FRESH_PIPELINE_REPORT.html`](arch/BCP_FRESH_PIPELINE_REPORT.html) ·
+[`arch/CDC_TABLE_CLASSIFICATION.md`](arch/CDC_TABLE_CLASSIFICATION.md) ·
+[`arch/DAY1_INIT_LOAD_PLANNING.md`](arch/DAY1_INIT_LOAD_PLANNING.md)
+
+---
+
+## Cấu hình
+
+**Airflow Connections:** `cob_control_conn` (Postgres control plane) · `minio_conn`
+
+**Airflow Variables:** `dremio_host` / `dremio_user` / `dremio_password` · `DBT_TARGET` ·
+`SPARK_NAMESPACE` · `kafka_bootstrap` · `cob_checkpoint_prefix` · `SFTP_HOST` / `SFTP_USER` /
+`SFTP_PASS` / `REMOTE_DIR` · `BUCKET_NAME`
+
+**K8s Secrets:** `mssql-credentials` · `minio-credentials`
+
+Khởi tạo bảng control:
+
 ```bash
-airflow tasks logs credit_pipeline_parser_dag detect_parse_candidates 2026-04-01T12:00:00
+psql -d cob_control -f scripts/cob_pipeline/01_postgres_control_tables.sql
 ```
 
-### Query ETL Logs
-```sql
--- Check which dates have been parsed
-SELECT cob_date, is_parsed, error_message FROM etl_parsed_logs_credit ORDER BY cob_date DESC LIMIT 10;
+> 🔐 Không có credential nào hardcode trong repo. Tất cả qua Airflow Variables/Connections hoặc
+> K8s Secret. File `kafka/*.example.yaml` là template, secret thật không commit.
 
--- Check model build status
-SELECT cob_date, is_built, dbt_run_id FROM etl_model_logs_credit WHERE is_built = false;
-```
+---
 
-## 📝 License & Support
+## Known gaps
 
-Internal project maintained by Data Engineering team.
+Ghi thẳng để người đọc code không mất thời gian đi tìm — chi tiết ở
+[mục Known gaps của doc kiến trúc](arch/BNCTL_DWH_System_Architecture.md#known-gaps):
+
+- `scripts/sync/sftp_sync_spark.py` chưa có trong repo (chỉ tồn tại trong image đã build) → build
+  image từ repo sạch thì `sftp_hold` không chạy được.
+- `F_PL_CLOSE_DATES` thiếu schema trong `ss_full.json` → 1/22 bảng reference parse fail.
+- `T24_SILVER/models/` có 15 file nhưng `ENQ_SOURCES` chỉ khai 11 → 4 model orphan.
+- `dags/lib/t24_sources.py::CDC_TABLES` stale (19 bảng) — authoritative là `enq_sources.py`.

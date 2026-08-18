@@ -1,16 +1,30 @@
 # Bake t24 parser + entrypoints + jars vào image Spark.
-# Bỏ hẳn MinIO presigned-deps + render script. Build context = REPO ROOT:
+# Build context = REPO ROOT:
 #   docker build -f spark/Dockerfile.t24 -t <registry>/spark-t24:v1 .
 FROM haiptjits/spark-3.5.1:v2
 
 USER root
 
-# 1) jars (kafka + mssql) -> classpath Spark có sẵn
-COPY spark/jars/*.jar /opt/spark/jars/
+# 1) jars (kafka streaming + mssql jdbc) -> classpath Spark có sẵn.
+#    Tải lúc build từ Maven Central thay vì commit 6.9MB binary vào repo.
+#    Pin version — đổi version = đổi cả ARG lẫn URL.
+ARG KAFKA_CLIENTS_VER=3.4.1
+ARG SPARK_KAFKA_VER=3.5.1
+ARG SCALA_VER=2.12
+ARG MSSQL_JDBC_VER=12.4.2.jre11
+ARG COMMONS_POOL2_VER=2.11.1
+ARG MAVEN=https://repo1.maven.org/maven2
+
+RUN set -eux; cd /opt/spark/jars; \
+    curl -fsSLO ${MAVEN}/org/apache/kafka/kafka-clients/${KAFKA_CLIENTS_VER}/kafka-clients-${KAFKA_CLIENTS_VER}.jar; \
+    curl -fsSLO ${MAVEN}/org/apache/spark/spark-sql-kafka-0-10_${SCALA_VER}/${SPARK_KAFKA_VER}/spark-sql-kafka-0-10_${SCALA_VER}-${SPARK_KAFKA_VER}.jar; \
+    curl -fsSLO ${MAVEN}/org/apache/spark/spark-token-provider-kafka-0-10_${SCALA_VER}/${SPARK_KAFKA_VER}/spark-token-provider-kafka-0-10_${SCALA_VER}-${SPARK_KAFKA_VER}.jar; \
+    curl -fsSLO ${MAVEN}/com/microsoft/sqlserver/mssql-jdbc/${MSSQL_JDBC_VER}/mssql-jdbc-${MSSQL_JDBC_VER}.jar; \
+    curl -fsSLO ${MAVEN}/org/apache/commons/commons-pool2/${COMMONS_POOL2_VER}/commons-pool2-${COMMONS_POOL2_VER}.jar
 
 # 2) parser lib -> pip install. Base image Python 3.8 < pyproject '>=3.9', nhưng
-#    code 3.8-compatible (from __future__ import annotations) — đã chạy cả buổi qua
-#    zip pyFiles → bỏ qua check bằng --ignore-requires-python.
+#    code 3.8-compatible (from __future__ import annotations) — bỏ qua check bằng
+#    --ignore-requires-python.
 COPY libs/t24_parser /tmp/t24_parser
 RUN pip install --no-cache-dir --ignore-requires-python /tmp/t24_parser \
     && rm -rf /tmp/t24_parser
@@ -18,7 +32,7 @@ RUN pip install --no-cache-dir --ignore-requires-python /tmp/t24_parser \
 # 3) pyarrow cho bcp streaming extract (boto3 đã có từ base)
 RUN pip install --no-cache-dir pyarrow==17.0.0
 
-# 5) mssql-tools (bcp) cho bulk extract
+# 4) mssql-tools (bcp) cho bulk extract
 RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | apt-key add - \
     && curl -fsSL https://packages.microsoft.com/config/ubuntu/20.04/prod.list \
        > /etc/apt/sources.list.d/mssql-release.list \
@@ -28,13 +42,8 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
 
 ENV PATH="$PATH:/opt/mssql-tools/bin"
 
-# 6) entrypoints (streaming CDC + batch/pull + bcp extract) -> local:///opt/jobs/*.py
+# 5) entrypoints (streaming CDC + batch/pull + bcp extract) -> local:///opt/jobs/*.py
 COPY jobs/ /opt/jobs/
 
-# 7) SFTP HOLD scripts (fetch + parse) -> local:///opt/jobs/*.py
-#    Trước đây đẩy lên s3a://spark-scripts/ thủ công; bake vào image cho đồng bộ với
-#    CDC/pull, hết drift upload tay.
-#    - scripts/parser/*.py: parser standalone PySpark (không import t24_parser lib).
-#    - scripts/sync/*.py:   fetch SFTP->MinIO (sftp_sync_spark.py dùng paramiko, có sẵn base).
+# 6) parser standalone cho SFTP HOLD (không import t24_parser lib) -> local:///opt/jobs/*.py
 COPY scripts/parser/*.py /opt/jobs/
-COPY scripts/sync/*.py /opt/jobs/

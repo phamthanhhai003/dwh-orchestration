@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCP Pull Pipeline — Performance Report</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f4f8; color: #1a202c; line-height: 1.7; font-size: 16px; }
+  .container { max-width: 1400px; margin: 0 auto; padding: 2.5rem; }
+
+  /* Header */
+  .header { background: #fff; border-radius: 12px; padding: 2rem 2.5rem; margin-bottom: 2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.08); border-left: 6px solid #3182ce; }
+  .header h1 { font-size: 2rem; color: #1a202c; font-weight: 800; }
+  .header .subtitle { color: #4a5568; font-size: 1rem; margin-top: 0.4rem; }
+
+  /* ELI10 box */
+  .eli10 { background: #fff; border-left: 5px solid #38a169; border-radius: 10px; padding: 1.8rem 2rem; margin-bottom: 2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+  .eli10 h2 { color: #276749; font-size: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1rem; }
+  .eli10 p { color: #2d3748; font-size: 1rem; margin-bottom: 0.7rem; }
+  .eli10 ul li { color: #2d3748; font-size: 1rem; }
+  .eli10 code { background: #edf2f7; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #c53030; }
+  .eli10 .flow { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
+  .eli10 .flow .box { background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 6px; padding: 0.4rem 0.9rem; font-size: 0.9rem; color: #2b6cb0; font-weight: 600; }
+  .eli10 .flow .arrow { color: #a0aec0; font-size: 1.2rem; font-weight: 700; }
+
+  /* Section */
+  .section { margin-bottom: 3rem; }
+  .section-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.2rem; padding-bottom: 0.7rem; border-bottom: 2px solid #e2e8f0; }
+  .section-header h2 { font-size: 1.4rem; color: #1a202c; font-weight: 700; }
+  .env-badge { padding: 0.3rem 0.9rem; border-radius: 20px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .badge-dev { background: #bee3f8; color: #2b6cb0; }
+  .badge-uat { background: #c6f6d5; color: #276749; }
+
+  /* Meta grid */
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .meta-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .meta-card .label { font-size: 0.75rem; color: #718096; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  .meta-card .value { font-size: 1rem; color: #1a202c; font-weight: 600; margin-top: 0.3rem; font-family: monospace; }
+
+  /* Spark config */
+  .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.7rem; margin-bottom: 1.5rem; }
+  .config-item { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.7rem 1rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .config-item .k { font-size: 0.85rem; color: #4a5568; font-weight: 500; }
+  .config-item .v { font-size: 0.95rem; color: #c05621; font-weight: 700; font-family: monospace; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.95rem; background: #fff; }
+  thead { background: #edf2f7; }
+  thead th { padding: 0.9rem 1.2rem; text-align: left; color: #2d3748; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.07em; white-space: nowrap; border-bottom: 2px solid #cbd5e0; }
+  thead th.num { text-align: right; }
+  tbody tr { border-bottom: 1px solid #edf2f7; transition: background 0.1s; }
+  tbody tr:hover { background: #f7fafc; }
+  tbody tr:last-child { border-bottom: none; }
+  td { padding: 0.85rem 1.2rem; vertical-align: middle; }
+  td.num { text-align: right; font-family: monospace; font-size: 0.95rem; color: #1a202c; font-weight: 500; }
+  td.table-name { font-family: monospace; font-size: 0.9rem; color: #2b6cb0; white-space: nowrap; font-weight: 600; }
+  td.running { color: #b7791f; font-style: italic; font-size: 0.88rem; text-align: right; }
+  td.pending { color: #a0aec0; font-style: italic; font-size: 0.88rem; text-align: right; }
+  td.tbd { color: #a0aec0; font-style: italic; font-size: 0.88rem; text-align: right; }
+  td.zero { color: #a0aec0; text-align: right; font-family: monospace; }
+
+  /* Badges inline */
+  .tag { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-left: 0.4rem; vertical-align: middle; }
+  .tag-actual { background: #c6f6d5; color: #22543d; }
+  .tag-empty  { background: #fed7d7; color: #9b2c2c; }
+
+  /* Size bar */
+  .size-bar-wrap { width: 90px; height: 7px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  .size-bar { height: 100%; background: #ed8936; border-radius: 4px; }
+
+  /* Type badge */
+  .type-badge { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-left: 0.35rem; vertical-align: middle; letter-spacing: 0.03em; }
+  .t1 { background: #e9f7ef; color: #276749; border: 1px solid #c6f6d5; }
+  .t2 { background: #ebf8ff; color: #2b6cb0; border: 1px solid #bee3f8; }
+  .t3 { background: #fff5f5; color: #c53030; border: 1px solid #fed7d7; }
+
+  /* Notes & legend */
+  .note { font-size: 0.88rem; color: #718096; margin-top: 1rem; line-height: 1.6; }
+  .legend { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 1rem; }
+  .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #4a5568; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>BCP Pull Pipeline — Performance Report</h1>
+    <div class="subtitle">pull_bulk DAG · MSSQL testdb → MinIO → Hive Iceberg · Updated 2026-06-25</div>
+  </div>
+
+  <!-- Intro -->
+  <div class="eli10" style="border-left-color:#3182ce;">
+    <h2 style="color:#2b6cb0;">Giới thiệu</h2>
+    <p>Báo cáo này ghi lại hiệu năng thực đo của pipeline <strong>pull_bulk</strong> — pipeline đồng bộ toàn bộ 36 bảng CDC từ MSSQL vào Hive Iceberg thông qua MinIO, sử dụng BCP làm công cụ extract. Dữ liệu được đo trên hai môi trường: <strong>DEV</strong> (giới hạn 100K rows/bảng, cluster dùng chung) và <strong>UAT</strong> (full data, disk HDD).</p>
+    <p>Mục đích chính: cung cấp baseline thời gian chạy theo từng bảng để estimate tổng thời gian Day-1 init load trên UAT và PROD, đồng thời xác định bottleneck cần tối ưu trước khi chuyển sang CDC streaming.</p>
+  </div>
+
+  <!-- ELI10 -->
+  <div class="eli10">
+    <h2>BCP (Bulk Copy Program) — Định nghĩa &amp; Cách hoạt động</h2>
+
+    <p><strong>BCP</strong> là command-line utility đi kèm Microsoft SQL Server (<code>mssql-tools</code>). Chức năng: copy dữ liệu giữa SQL Server instance và file — theo hướng <em>queryout</em> (DB → stdout) hoặc <em>in</em> (file → DB).</p>
+
+    <p><strong>Cách hoạt động:</strong> BCP mở kết nối TDS (Tabular Data Stream — giao thức native của SQL Server) đến database, thực thi query, và stream kết quả ra stdout dưới dạng text thuần (TSV). Không serialize qua JDBC driver, không đi qua JVM.</p>
+
+    <p><strong>Resource tiêu thụ:</strong></p>
+    <ul style="margin: 0.5rem 0 0.5rem 1.2rem; color: #2d3748; font-size: 1rem; line-height: 1.9;">
+      <li><strong>CPU (MSSQL server):</strong> query execution + serialize sang TSV text</li>
+      <li><strong>CPU (client pod):</strong> <code>grep</code> filter stdout → <code>pyarrow</code> parse TSV → serialize Parquet (CPU-bound)</li>
+      <li><strong>RAM (client pod):</strong> buffer pyarrow chunk in-memory trước khi upload (~250 MB/chunk ở 500K rows × avg row size)</li>
+      <li><strong>Network:</strong> toàn bộ dữ liệu stream từ MSSQL pod → client pod qua cluster network (TCP/TDS)</li>
+      <li><strong>Storage:</strong> không ghi disk local — Parquet chunk ghi thẳng lên MinIO qua boto3 stream upload</li>
+    </ul>
+
+    <p><strong>Pipeline 3 bước / bảng:</strong></p>
+    <div class="flow">
+      <div class="box">① Extract</div>
+      <div class="arrow">→</div>
+      <div class="box">BCP stdout (TSV)</div>
+      <div class="arrow">→</div>
+      <div class="box">grep filter</div>
+      <div class="arrow">→</div>
+      <div class="box">pyarrow chunk → Parquet</div>
+      <div class="arrow">→</div>
+      <div class="box">MinIO s3a://raw/test_bulk/</div>
+      <div class="arrow">·</div>
+      <div class="box">② Parse</div>
+      <div class="arrow">→</div>
+      <div class="box">Spark đọc Parquet</div>
+      <div class="arrow">→</div>
+      <div class="box">XML parse → Iceberg hive.test.*</div>
+      <div class="arrow">·</div>
+      <div class="box">③ Seal</div>
+      <div class="arrow">→</div>
+      <div class="box">Dremio refresh + count(*) → etl_control</div>
+    </div>
+  </div>
+
+  <!-- Pipeline flow & size calc -->
+  <div class="eli10" style="border-left-color:#805ad5;">
+    <h2 style="color:#553c9a;">Luồng chạy & Cách tính size</h2>
+
+    <p style="margin-bottom:1rem;color:#4a5568;">36 bảng chạy song song, mỗi bảng đi qua 3 bước tuần tự:</p>
+
+    <div style="display:flex;gap:0;align-items:stretch;margin-bottom:1.4rem;flex-wrap:wrap;gap:0.5rem;">
+      <div style="flex:1;min-width:180px;background:#ebf8ff;border:1px solid #bee3f8;border-radius:8px;padding:1rem 1.2rem;">
+        <div style="font-size:0.78rem;font-weight:700;color:#2b6cb0;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem;">① Extract <span style="font-weight:400;color:#718096">· tối đa 4 bảng/lúc</span></div>
+        <div style="font-size:0.93rem;color:#2d3748;line-height:1.7;">BCP stream TSV từ MSSQL<br>→ mỗi <strong>500K rows</strong> ghi 1 file Parquet (~250 MB RAM)<br>→ upload thẳng lên MinIO<br><span style="color:#718096;font-size:0.85rem;">Không qua disk local</span></div>
+      </div>
+      <div style="display:flex;align-items:center;color:#a0aec0;font-size:1.4rem;padding:0 0.2rem;">→</div>
+      <div style="flex:1;min-width:180px;background:#faf5ff;border:1px solid #e9d8fd;border-radius:8px;padding:1rem 1.2rem;">
+        <div style="font-size:0.78rem;font-weight:700;color:#553c9a;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem;">② Parse <span style="font-weight:400;color:#718096">· tối đa 5 bảng/lúc</span></div>
+        <div style="font-size:0.93rem;color:#2d3748;line-height:1.7;">Spark đọc Parquet từ MinIO<br>→ parse XML → columns<br>→ ghi Hive Iceberg<br><span style="color:#718096;font-size:0.85rem;">Bước tốn thời gian nhất</span></div>
+      </div>
+      <div style="display:flex;align-items:center;color:#a0aec0;font-size:1.4rem;padding:0 0.2rem;">→</div>
+      <div style="flex:1;min-width:180px;background:#f0fff4;border:1px solid #c6f6d5;border-radius:8px;padding:1rem 1.2rem;">
+        <div style="font-size:0.78rem;font-weight:700;color:#276749;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem;">③ Seal <span style="font-weight:400;color:#718096">· tối đa 7 bảng/lúc</span></div>
+        <div style="font-size:0.93rem;color:#2d3748;line-height:1.7;">Dremio refresh metadata<br>→ đếm rows theo ngày<br>→ ghi log etl_control<br><span style="color:#718096;font-size:0.85rem;">~10–30s/bảng</span></div>
+      </div>
+    </div>
+
+    <p style="color:#4a5568;font-size:0.93rem;"><strong>Dev Size Est</strong> = tỉ lệ từ size thực UAT: <code style="background:#edf2f7;padding:0.15rem 0.5rem;border-radius:3px;color:#c53030;">UAT_GB × 1024 × (100K / UAT_rows)</code> — dev giới hạn tối đa 100K rows/bảng.</p>
+  </div>
+
+  <!-- ═══════════════════ DEV ═══════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>DEV Environment</h2>
+      <span class="env-badge badge-dev">DEV</span>
+    </div>
+
+    <div class="meta-grid">
+      <div class="meta-card">
+        <div class="label">DAG Run ID</div>
+        <div class="value" style="font-size:0.72rem">manual__2026-06-24T18:41:02_paDr4vX1</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Start (UTC)</div>
+        <div class="value">2026-06-24 18:41</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Row Cap / Table</div>
+        <div class="value">100,000 rows</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Tables</div>
+        <div class="value">36 tables</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Source DB</div>
+        <div class="value">testdb (MSSQL)</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Target</div>
+        <div class="value">hive.test.*</div>
+      </div>
+    </div>
+
+    <div class="config-grid">
+      <div class="config-item"><span class="k">Executor instances</span><span class="v">2</span></div>
+      <div class="config-item"><span class="k">Executor cores</span><span class="v">2</span></div>
+      <div class="config-item"><span class="k">Executor memory</span><span class="v">2g</span></div>
+      <div class="config-item"><span class="k">Driver memory</span><span class="v">1g</span></div>
+      <div class="config-item"><span class="k">shuffle.partitions</span><span class="v">4</span></div>
+      <div class="config-item"><span class="k">Extract pool</span><span class="v">4 slots</span></div>
+      <div class="config-item"><span class="k">Parse pool</span><span class="v">5 slots</span></div>
+      <div class="config-item"><span class="k">Seal pool</span><span class="v">7 slots</span></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>MSSQL Table</th>
+            <th class="num">Dev Rows</th>
+            <th class="num">Dev Size Est (MB)</th>
+            <th class="num">Extract (s)</th>
+            <th class="num">Parse (s)</th>
+            <th class="num">Seal (s)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- sorted by parse duration desc (heaviest first) -->
+          <tr>
+            <td class="table-name">AAFBNK_AA010<br><small style="color:#718096">AA.ACTIVITY.HISTORY</small></td>
+            <td class="num">100,000</td>
+            <td class="num">4,361<div class="size-bar-wrap"><div class="size-bar" style="width:100%"></div></div></td>
+            <td class="num">360</td>
+            <td class="num">4,517</td>
+            <td class="num">11</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_ACCOUNT</td>
+            <td class="num">100,000</td>
+            <td class="num">1,849<div class="size-bar-wrap"><div class="size-bar" style="width:42%"></div></div></td>
+            <td class="num">331</td>
+            <td class="num">3,744</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AA_ACCOUNT_DETAILS</td>
+            <td class="num">100,000</td>
+            <td class="num">1,026<div class="size-bar-wrap"><div class="size-bar" style="width:24%"></div></div></td>
+            <td class="num">177</td>
+            <td class="num">1,281</td>
+            <td class="num">11</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_PV_ASSET_DETAIL</td>
+            <td class="num">100,000</td>
+            <td class="num">808<div class="size-bar-wrap"><div class="size-bar" style="width:19%"></div></div></td>
+            <td class="num">101</td>
+            <td class="num">1,228</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_FUNDS_TRANSFER <span class="tag tag-actual">actual</span></td>
+            <td class="num">10,158</td>
+            <td class="num">42<div class="size-bar-wrap"><div class="size-bar" style="width:1%"></div></div></td>
+            <td class="num">11</td>
+            <td class="num">1,166</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_CUSTOMER</td>
+            <td class="num">100,000</td>
+            <td class="num">496<div class="size-bar-wrap"><div class="size-bar" style="width:11%"></div></div></td>
+            <td class="num">24</td>
+            <td class="num">1,492</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_EM_LO_APPLICATION <span class="tag tag-actual">actual</span></td>
+            <td class="num">98,355</td>
+            <td class="num">338<div class="size-bar-wrap"><div class="size-bar" style="width:8%"></div></div></td>
+            <td class="num">98</td>
+            <td class="num">577</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AA_ARRANGEMENT</td>
+            <td class="num">100,000</td>
+            <td class="num">313<div class="size-bar-wrap"><div class="size-bar" style="width:7%"></div></div></td>
+            <td class="num">19</td>
+            <td class="num">462</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_ACCOUNT_HIS</td>
+            <td class="num">100,000</td>
+            <td class="num">373<div class="size-bar-wrap"><div class="size-bar" style="width:9%"></div></div></td>
+            <td class="num">14</td>
+            <td class="num">433</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">AAFBNK_AA093<br><small style="color:#718096">AA.ARR.PAYMENT.SCHEDULE</small></td>
+            <td class="num">100,000</td>
+            <td class="num">304<div class="size-bar-wrap"><div class="size-bar" style="width:7%"></div></div></td>
+            <td class="num">18</td>
+            <td class="num">420</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AA_ARR_TERM_AMOUNT</td>
+            <td class="num">100,000</td>
+            <td class="num">212<div class="size-bar-wrap"><div class="size-bar" style="width:5%"></div></div></td>
+            <td class="num">14</td>
+            <td class="num">388</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AA_BILL_DETAILS</td>
+            <td class="num">100,000</td>
+            <td class="num">588<div class="size-bar-wrap"><div class="size-bar" style="width:13%"></div></div></td>
+            <td class="num">18</td>
+            <td class="num">377</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_CATEG_ENTRY</td>
+            <td class="num">100,000</td>
+            <td class="num">110<div class="size-bar-wrap"><div class="size-bar" style="width:3%"></div></div></td>
+            <td class="num">14</td>
+            <td class="num">336</td>
+            <td class="num">11</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_CATEG_ENTRY_DETAIL</td>
+            <td class="num">100,000</td>
+            <td class="num">123<div class="size-bar-wrap"><div class="size-bar" style="width:3%"></div></div></td>
+            <td class="num">14</td>
+            <td class="num">314</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_STMT_ENTRY_DETAIL</td>
+            <td class="num">100,000</td>
+            <td class="num">373<div class="size-bar-wrap"><div class="size-bar" style="width:9%"></div></div></td>
+            <td class="num">15</td>
+            <td class="num">297</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_ACCT_ACTIVITY</td>
+            <td class="num">100,000</td>
+            <td class="num">122<div class="size-bar-wrap"><div class="size-bar" style="width:3%"></div></div></td>
+            <td class="num">15</td>
+            <td class="num">277</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_ACCOUNT_CLOSED</td>
+            <td class="num">100,000</td>
+            <td class="num">40<div class="size-bar-wrap"><div class="size-bar" style="width:1%"></div></div></td>
+            <td class="num">11</td>
+            <td class="num">241</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_ACCOUNT_STATEMENT</td>
+            <td class="num">100,000</td>
+            <td class="num">132<div class="size-bar-wrap"><div class="size-bar" style="width:3%"></div></div></td>
+            <td class="num">13</td>
+            <td class="num">232</td>
+            <td class="num">11</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_STMT_ENTRY</td>
+            <td class="num">100,000</td>
+            <td class="num">184<div class="size-bar-wrap"><div class="size-bar" style="width:4%"></div></div></td>
+            <td class="num">15</td>
+            <td class="num">229</td>
+            <td class="num">11</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AA_PROCESS_DETAILS</td>
+            <td class="num">100,000</td>
+            <td class="num">207<div class="size-bar-wrap"><div class="size-bar" style="width:5%"></div></div></td>
+            <td class="num">13</td>
+            <td class="num">216</td>
+            <td class="num">11</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_ACCOUNT_HIS</td>
+            <td class="num">100,000</td>
+            <td class="num">373<div class="size-bar-wrap"><div class="size-bar" style="width:9%"></div></div></td>
+            <td class="num">14</td>
+            <td class="num">433</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">AAFBNK_AA063<br><small style="color:#718096">AA.ARR.BALANCE.MAINTENANCE</small></td>
+            <td class="num">100,000</td>
+            <td class="num">224<div class="size-bar-wrap"><div class="size-bar" style="width:5%"></div></div></td>
+            <td class="num">19</td>
+            <td class="num">1,442</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AA_ARR_CUSTOMER</td>
+            <td class="num">100,000</td>
+            <td class="num">123<div class="size-bar-wrap"><div class="size-bar" style="width:3%"></div></div></td>
+            <td class="num">12</td>
+            <td class="num">181</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_ACCT_STMT_PRINT</td>
+            <td class="num">100,000</td>
+            <td class="num">20<div class="size-bar-wrap"><div class="size-bar" style="width:1%"></div></div></td>
+            <td class="num">13</td>
+            <td class="num">190</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AA_ARR_ACCOUNT</td>
+            <td class="num">100,000</td>
+            <td class="num">248<div class="size-bar-wrap"><div class="size-bar" style="width:6%"></div></div></td>
+            <td class="num">14</td>
+            <td class="num">290</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_STMT_PRINTED</td>
+            <td class="num">100,000</td>
+            <td class="num">260<div class="size-bar-wrap"><div class="size-bar" style="width:6%"></div></div></td>
+            <td class="num">14</td>
+            <td class="num">109</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_CUSTOMER_ACCOUNT</td>
+            <td class="num">100,000</td>
+            <td class="num">42<div class="size-bar-wrap"><div class="size-bar" style="width:1%"></div></div></td>
+            <td class="num">11</td>
+            <td class="num">130</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">ACFBNK_AC009 <span class="tag tag-empty">empty</span><br><small style="color:#718096">AC.ACCOUNT.SWEEP.HIST</small></td>
+            <td class="zero">0</td>
+            <td class="zero">0</td>
+            <td class="num">13</td>
+            <td class="num">105</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AA_CUSTOMER_ROLE <span class="tag tag-actual">actual</span></td>
+            <td class="num">51</td>
+            <td class="zero">&lt;1</td>
+            <td class="num">13</td>
+            <td class="num">86</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AC_LOCKED_EVENTS</td>
+            <td class="num">100,000</td>
+            <td class="num">132<div class="size-bar-wrap"><div class="size-bar" style="width:3%"></div></div></td>
+            <td class="num">13</td>
+            <td class="num">104</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">ACFBNK_ST002<br><small style="color:#718096">STMT.ENTRY.DETAIL.XREF</small></td>
+            <td class="num">100,000</td>
+            <td class="num">42<div class="size-bar-wrap"><div class="size-bar" style="width:1%"></div></div></td>
+            <td class="num">10</td>
+            <td class="num">114</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">ACFBNK_CA002<br><small style="color:#718096">CATEG.ENTRY.DETAIL.XREF</small></td>
+            <td class="num">100,000</td>
+            <td class="num">42<div class="size-bar-wrap"><div class="size-bar" style="width:1%"></div></div></td>
+            <td class="num">13</td>
+            <td class="num">107</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AC_SUB_ACCOUNT <span class="tag tag-actual">actual</span></td>
+            <td class="num">6</td>
+            <td class="zero">&lt;1</td>
+            <td class="num">11</td>
+            <td class="num">105</td>
+            <td class="num">11</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_TELLER <span class="tag tag-actual">actual</span></td>
+            <td class="num">6</td>
+            <td class="zero">&lt;1</td>
+            <td class="num">11</td>
+            <td class="num">90</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_CATEG_ENT_TODAY <span class="tag tag-actual">actual</span></td>
+            <td class="num">3</td>
+            <td class="zero">&lt;1</td>
+            <td class="num">11</td>
+            <td class="num">975</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_ACCT_ENT_TODAY <span class="tag tag-empty">empty</span></td>
+            <td class="zero">0</td>
+            <td class="zero">0</td>
+            <td class="num">11</td>
+            <td class="num">84</td>
+            <td class="num">10</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_EM_DL_APPLICATION <span class="tag tag-empty">empty</span></td>
+            <td class="zero">0</td>
+            <td class="zero">0</td>
+            <td class="num">11</td>
+            <td class="num">91</td>
+            <td class="num">10</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#2b4c7e"></div>actual = bảng < 100K rows, dùng số thực</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3d2b1f"></div>empty = 0 rows, extract write placeholder, parse/seal vẫn chạy</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ed8936"></div>size bar = tỉ lệ so với bảng lớn nhất (AAFBNK_AA010 = 4,361 MB)</div>
+    </div>
+    <p class="note">* Parse duration = XML parse + Iceberg write. Bottleneck chính: XML size/row (AAFBNK_AA010 ~11KB/row) và Spark shuffle với partitions=4.</p>
+  </div>
+
+  <!-- ═══════════════════ UAT ═══════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>UAT Environment</h2>
+      <span class="env-badge badge-uat">UAT</span>
+    </div>
+
+    <!-- Spark Config UAT -->
+    <p style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#718096;margin-bottom:0.7rem;">Spark Configuration (Parse — UAT)</p>
+    <div class="config-grid">
+      <div class="config-item"><span class="k">Image</span><span class="v">spark-t24:build-156</span></div>
+      <div class="config-item"><span class="k">Driver CPU</span><span class="v">2 core / 2000m</span></div>
+      <div class="config-item"><span class="k">Driver RAM</span><span class="v">4 GB</span></div>
+      <div class="config-item"><span class="k">Executor</span><span class="v">2 × 2 cores</span></div>
+      <div class="config-item"><span class="k">Executor RAM</span><span class="v">4 GB each</span></div>
+      <div class="config-item"><span class="k">shuffle.partitions</span><span class="v">4</span></div>
+      <div class="config-item"><span class="k">Tổng / job</span><span class="v">6 core · 12 GB</span></div>
+      <div class="config-item"><span class="k">Pool slots</span><span class="v">2 job song song (t24_parsing=5)</span></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>MSSQL Table</th>
+            <th class="num">UAT Rows</th>
+            <th class="num">UAT Size (GB)</th>
+            <th class="num">Extract</th>
+            <th class="num">Parse</th>
+            <th class="num">Seal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="table-name">FBNK_ACCOUNT <span class="type-badge t3">T3</span></td>
+            <td class="num">699,343</td>
+            <td class="num">12.93</td>
+            <td class="num">1,626s (~27m)</td>
+            <td class="tbd">—</td>
+            <td class="tbd">—</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_CUSTOMER <span class="type-badge t3">T3</span></td>
+            <td class="num">619,395</td>
+            <td class="num">3.00</td>
+            <td class="num">1,391s (~23m)</td>
+            <td class="num">5,919s (~1h38m)</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AA_BILL_DETAILS <span class="type-badge t3">T3</span></td>
+            <td class="num">583,163</td>
+            <td class="num">3.35</td>
+            <td class="num">1,402s (~23m)</td>
+            <td class="num">2,683s (~44m)</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AA_PROCESS_DETAILS <span class="type-badge t3">T3</span></td>
+            <td class="num">22,815,444</td>
+            <td class="num">46.11</td>
+            <td class="num">93m 31s</td>
+            <td class="num">192m 07s (~3h12)</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_ACCT_ACTIVITY <span class="type-badge t3">T3</span></td>
+            <td class="num">20,602,745</td>
+            <td class="num">24.48</td>
+            <td class="num">94m 33s</td>
+            <td class="num">235m 24s (~3h55)</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <!-- ── Run dByUfHPz (2026-06-28, COB 2026-06-25, 10 bảng) ── -->
+          <tr style="background:#edf2f7;">
+            <td colspan="6" style="font-size:0.78rem;font-weight:700;color:#4a5568;padding:0.4rem 0.8rem;letter-spacing:0.05em;">
+              Run dByUfHPz — 2026-06-28 · COB 2026-06-25 · wall-clock ~45m 41s · extract 10/10 ✅ · parse 5/10 ✅ (5 fail nguồn 0 row) · seal ❌ Dremio
+            </td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AC_LOCKED_EVENTS</td>
+            <td class="num">51,349</td>
+            <td class="num">0.12</td>
+            <td class="tbd">—</td>
+            <td class="num">~7m 4s</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_TELLER</td>
+            <td class="num">0</td>
+            <td class="num">0.01</td>
+            <td class="tbd">—</td>
+            <td class="num">~4m (❌ 0 row)</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_CATEG_ENT_TODAY</td>
+            <td class="num">0</td>
+            <td class="num">0.00</td>
+            <td class="tbd">—</td>
+            <td class="num">4m 45s (❌ 0 row)</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_ACCT_ENT_TODAY</td>
+            <td class="num">0</td>
+            <td class="num">0.00</td>
+            <td class="tbd">—</td>
+            <td class="num">~6m 4s (❌ 0 row)</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AC_ACCOUNT_SWEEP_HIST</td>
+            <td class="tbd">—</td>
+            <td class="tbd">—</td>
+            <td class="tbd">—</td>
+            <td class="num">~5m 4s (❌ 0 row)</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AC_SUB_ACCOUNT</td>
+            <td class="num">2</td>
+            <td class="num">0.00</td>
+            <td class="num">2m 34s</td>
+            <td class="num">~3m 5s</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_EM_DL_APPLICATION</td>
+            <td class="num">0</td>
+            <td class="num">0.00</td>
+            <td class="tbd">—</td>
+            <td class="num">~4m 2s (❌ 0 row)</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_AA_CUSTOMER_ROLE</td>
+            <td class="num">17</td>
+            <td class="num">0.00</td>
+            <td class="tbd">—</td>
+            <td class="num">~6m</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_FUNDS_TRANSFER</td>
+            <td class="num">2,012</td>
+            <td class="num">0.02</td>
+            <td class="tbd">—</td>
+            <td class="num">~7m</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+          <tr>
+            <td class="table-name">FBNK_EM_LO_APPLICATION</td>
+            <td class="num">32,785</td>
+            <td class="num">0.30</td>
+            <td class="tbd">—</td>
+            <td class="num">~25m</td>
+            <td class="tbd">upstream_failed</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note" style="margin-top:0.8rem">FBNK_ACCOUNT parse chưa có số liệu — sẽ điền sau khi chạy xong. Seal upstream_failed = Dremio HTTP 500, không liên quan parse. † FBNK_AA_PROCESS_DETAILS & FBNK_ACCT_ACTIVITY dùng cấu hình riêng — xem bảng bên dưới.</p>
+
+    <!-- Config run DCSXtmUk -->
+    <p style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#718096;margin:1rem 0 0.5rem;">Spark Configuration — Run DCSXtmUk (AA_PROCESS_DETAILS · ACCT_ACTIVITY)</p>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.5rem 2rem;margin-bottom:0.8rem;">
+      <div style="font-size:0.8rem;font-weight:700;color:#4a5568;text-transform:uppercase;letter-spacing:0.05em;grid-column:1/-1;margin-top:0.3rem;">Parse (t24_bulk_parse.yaml · configmap: t24-bulk-parse-yaml-patch)</div>
+      <div class="config-item"><span class="k">Driver</span><span class="v">2 core / 2000m · 4g</span></div>
+      <div class="config-item"><span class="k">Executor</span><span class="v">2 × 2 cores · 4g each</span></div>
+      <div class="config-item"><span class="k">Tổng / job</span><span class="v">6 core · 12 GB</span></div>
+      <div class="config-item"><span class="k">shuffle.partitions</span><span class="v">4</span></div>
+      <div style="font-size:0.8rem;font-weight:700;color:#4a5568;text-transform:uppercase;letter-spacing:0.05em;grid-column:1/-1;margin-top:0.5rem;">Extract (t24_bcp_extract.yaml · configmap: bcp-extract-yaml-patch)</div>
+      <div class="config-item"><span class="k">Driver</span><span class="v">1 core / 1000m · 2g</span></div>
+      <div class="config-item"><span class="k">Executor</span><span class="v">1 × 1 core · 512m</span></div>
+      <div style="font-size:0.8rem;font-weight:700;color:#4a5568;text-transform:uppercase;letter-spacing:0.05em;grid-column:1/-1;margin-top:0.5rem;">Scheduling</div>
+      <div class="config-item"><span class="k">Pool t24_pulling</span><span class="v">2 slots (1/task)</span></div>
+      <div class="config-item"><span class="k">Pool t24_parsing</span><span class="v">3 slots (1/task)</span></div>
+      <div class="config-item"><span class="k">Airflow namespace</span><span class="v">bnctl-airflow-uat-ns</span></div>
+      <div class="config-item"><span class="k">Spark namespace</span><span class="v">bnctl-spark-uat-ns</span></div>
+      <div class="config-item"><span class="k">startup_timeout</span><span class="v">1800s</span></div>
+      <div class="config-item"><span class="k">delete_on_termination</span><span class="v">False</span></div>
+    </div>
+
+    <div style="background:#fffbeb;border-left:4px solid #d69e2e;border-radius:8px;padding:1.2rem 1.5rem;margin-top:1.2rem;">
+      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#975a16;margin-bottom:0.7rem;">Tổng kết UAT — Run 2026-06-27 (COB 2026-06-25)</div>
+      <p style="color:#2d3748;font-size:0.95rem;margin-bottom:0.6rem;">Run <code style="background:#edf2f7;padding:0.1rem 0.4rem;border-radius:3px;color:#c53030;">manual__2026-06-27T11:48:15_LtN5nMze</code> chạy 2 bảng: <strong>FBNK_CUSTOMER</strong> (3 GB, 619K rows) và <strong>FBNK_AA_BILL_DETAILS</strong> (3.35 GB, 583K rows). Extract ~23m/bảng, parse thành công ở try 3 (1h38m và 44m). Data đã vào Hive Iceberg.</p>
+      <p style="color:#2d3748;font-size:0.95rem;margin-bottom:0.6rem;">Parse try 1 & 2 fail do <strong>kube-apiserver OOMKilled</strong> → Calico CNI timeout → Spark executor không đăng ký được về driver. Try 3 cụm tạm ổn → chạy thông. Seal upstream_failed do <strong>Dremio HTTP 500</strong> (<code style="background:#edf2f7;padding:0.1rem 0.4rem;border-radius:3px;color:#c53030;">userGroup store not found</code>) — chờ DevOps fix.</p>
+      <p style="color:#2d3748;font-size:0.95rem;margin-bottom:0.6rem;">FBNK_AA_BILL_DETAILS parse 44m dù cùng ~3 GB với CUSTOMER (1h38m) — XML schema đơn giản hơn. FBNK_ACCOUNT (12.93 GB) chưa parse — sẽ điền sau.</p>
+      <p style="color:#2d3748;font-size:0.95rem;margin-bottom:0.6rem;">Run <code style="background:#edf2f7;padding:0.1rem 0.4rem;border-radius:3px;color:#c53030;">manual__2026-06-28T05:42:29_DCSXtmUk</code> chạy 2 bảng cực lớn: <strong>FBNK_AA_PROCESS_DETAILS</strong> (22.8M rows, 46 GB) và <strong>FBNK_ACCT_ACTIVITY</strong> (20.6M rows, 24 GB). Extract ~94m/bảng, parse ~3–4h/bảng, <strong>đậu ngay try 1</strong> — cụm ổn định hơn run trước.</p>
+      <p style="color:#2d3748;font-size:0.95rem;margin-bottom:0.6rem;">Seal upstream_failed do Dremio HTTP 500 — chờ DevOps. Data đã vào <code style="background:#edf2f7;padding:0.1rem 0.4rem;border-radius:3px;color:#2b6cb0;">hive.uat.t24_aa_process_details</code> và <code style="background:#edf2f7;padding:0.1rem 0.4rem;border-radius:3px;color:#2b6cb0;">hive.uat.t24_acct_activity</code>.</p>
+      <p style="color:#2d3748;font-size:0.95rem;margin-bottom:0.6rem;">Run <code style="background:#edf2f7;padding:0.1rem 0.4rem;border-radius:3px;color:#c53030;">dByUfHPz</code> (2026-06-28, COB 2026-06-25) chạy 10 bảng — wall-clock ~45m 41s. Extract 10/10 ✅. Parse 5/10 ✅ (ac-sub-account, aa-customer-role, funds-transfer, ac-locked-events, em-lo-application) — 5 còn lại fail do nguồn 0 row (TELLER, CATEG_ENT_TODAY, ACCT_ENT_TODAY, EM_DL_APPLICATION, AC_ACCOUNT_SWEEP_HIST). Cụm ổn định, không retry. Seal toàn bộ fail Dremio HTTP 500.</p>
+      <p style="color:#2d3748;font-size:0.95rem;">em-lo-application là đường găng (~25m parse), các bảng nhỏ 3–7m. Extract duration chỉ ghi nhận được ac-sub-account (2m 34s) — các bảng còn lại nhỏ tương tự. Config Spark giữ nguyên như run DCSXtmUk (6c/12g/job, pool t24_parsing=3, t24_pulling=2).</p>
+    </div>
+  </div>
+
+  <!-- Closing -->
+  <div class="eli10" style="border-left-color:#dd6b20;">
+    <h2 style="color:#c05621;">Kết luận</h2>
+    <p>Pipeline <strong>pull_bulk</strong> đã chạy thành công end-to-end toàn bộ 36 bảng CDC trên DEV — 109 tasks (extract + parse + seal), không có failure sau khi xử lý các edge case bảng rỗng. Tổng thời gian DEV run: ~2h từ lúc trigger đến task cuối cùng seal xong.</p>
+    <p>Giai đoạn <strong>Parse chiếm phần lớn thời gian</strong> so với Extract. AAFBNK_AA010 là bảng nặng nhất: extract 360s, parse 4,517s — XML size/row lớn (~11KB/row) là nguyên nhân chính. Trên UAT, FBNK_CUSTOMER (3 GB thực) parse mất 3h36m với cấu hình 2 executors, shuffle.partitions=4.</p>
+    <p>Số liệu DEV và UAT trong báo cáo này là cơ sở để estimate thời gian Day-1 init load khi chạy full data trên từng bảng.</p>
+  </div>
+
+</div>
+</body>
+</html>

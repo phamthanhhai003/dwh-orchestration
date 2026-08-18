@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>BCP vs JDBC — Deep Dive</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; font-size: 14px; color: #1a1a2e; background: #fff; }
+
+  .page { max-width: 1000px; margin: 0 auto; padding: 48px 40px; }
+
+  h1 { font-size: 28px; font-weight: 800; color: #0f3460; border-bottom: 4px solid #e94560; padding-bottom: 12px; margin-bottom: 6px; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 40px; }
+
+  h2 { font-size: 18px; font-weight: 700; color: #0f3460; margin: 40px 0 14px; padding-left: 12px; border-left: 5px solid #e94560; }
+  h3 { font-size: 14px; font-weight: 700; color: #16213e; margin: 24px 0 10px; }
+
+  .section { background: #fff; border-radius: 10px; padding: 24px 28px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid #eef0f5; }
+
+  /* FLOW DIAGRAM */
+  .flow { font-family: 'Courier New', monospace; font-size: 12px; background: #0f1923; color: #c9d1d9; border-radius: 8px; padding: 20px 24px; line-height: 1.9; overflow-x: auto; margin: 16px 0; }
+  .flow .green   { color: #3fb950; }
+  .flow .yellow  { color: #e3b341; }
+  .flow .blue    { color: #58a6ff; }
+  .flow .red     { color: #f85149; }
+  .flow .gray    { color: #8b949e; }
+  .flow .orange  { color: #d29922; }
+  .flow .white   { color: #ffffff; font-weight: bold; }
+
+  /* TIMELINE */
+  .timeline-wrap { margin: 20px 0; }
+  .tl-label { font-size: 12px; font-weight: 700; color: #555; margin-bottom: 6px; }
+  .tl-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+  .tl-name { width: 180px; flex-shrink: 0; color: #333; font-size: 11px; }
+  .tl-bar-wrap { flex: 1; background: #f0f0f0; border-radius: 4px; height: 22px; position: relative; }
+  .tl-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-size: 11px; font-weight: 700; color: #fff; white-space: nowrap; }
+  .tl-wait { background: repeating-linear-gradient(90deg, #ddd 0px, #ddd 6px, #f5f5f5 6px, #f5f5f5 12px); height: 100%; border-radius: 0 4px 4px 0; }
+  .bar-bcp  { background: #28a745; }
+  .bar-jdbc { background: #e94560; }
+  .bar-wait { background: #fd7e14; opacity: 0.6; }
+  .bar-idle { background: #adb5bd; }
+  .tl-legend { display: flex; gap: 20px; margin-top: 10px; font-size: 11px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: middle; }
+
+  /* TABLE */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; }
+  th { background: #0f3460; color: #fff; padding: 10px 14px; text-align: left; font-weight: 600; font-size: 12px; }
+  td { padding: 9px 14px; border-bottom: 1px solid #eef0f5; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #f9fafc; }
+  .win { color: #28a745; font-weight: 700; }
+  .lose { color: #e94560; }
+
+  /* BADGE */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+  .badge-green  { background: #d4edda; color: #155724; }
+  .badge-red    { background: #f8d7da; color: #721c24; }
+  .badge-yellow { background: #fff3cd; color: #856404; }
+  .badge-blue   { background: #d1ecf1; color: #0c5460; }
+
+  /* CALLOUT */
+  .callout { border-radius: 8px; padding: 16px 20px; margin: 16px 0; font-size: 13px; line-height: 1.7; }
+  .callout-blue   { background: #e8f4fd; border-left: 4px solid #1a73e8; }
+  .callout-green  { background: #e8f5e9; border-left: 4px solid #28a745; }
+  .callout-orange { background: #fff3e0; border-left: 4px solid #fd7e14; }
+  .callout-red    { background: #fdecea; border-left: 4px solid #e94560; }
+  .callout strong { display: block; margin-bottom: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* STEP */
+  .steps { display: flex; flex-direction: column; gap: 0; margin: 16px 0; }
+  .step { display: flex; gap: 0; }
+  .step-num { width: 32px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; }
+  .step-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .step-line { width: 2px; flex: 1; background: #dee2e6; margin: 2px auto; min-height: 20px; }
+  .step-body { padding: 2px 0 20px 12px; flex: 1; }
+  .step-title { font-size: 13px; font-weight: 700; color: #0f3460; margin-bottom: 4px; line-height: 1.4; }
+  .step-desc { font-size: 12px; color: #555; line-height: 1.6; }
+  .step-code { font-family: monospace; font-size: 11px; background: #f4f6fb; border-radius: 4px; padding: 6px 10px; margin-top: 6px; color: #333; }
+
+  .c-bcp  { background: #28a745; }
+  .c-jdbc { background: #e94560; }
+  .c-gray { background: #adb5bd; }
+
+  /* VS BOX */
+  .vs-grid { display: grid; grid-template-columns: 1fr 48px 1fr; gap: 0; margin: 20px 0; align-items: start; }
+  .vs-box { border-radius: 8px; padding: 20px; }
+  .vs-box-bcp  { background: #e8f5e9; border: 2px solid #28a745; }
+  .vs-box-jdbc { background: #fdecea; border: 2px solid #e94560; }
+  .vs-title { font-size: 15px; font-weight: 800; margin-bottom: 12px; }
+  .vs-title-bcp  { color: #155724; }
+  .vs-title-jdbc { color: #721c24; }
+  .vs-center { display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 900; color: #aaa; padding-top: 60px; }
+  .vs-item { font-size: 12px; margin: 6px 0; display: flex; gap: 8px; line-height: 1.5; }
+  .vs-icon { flex-shrink: 0; }
+
+  /* SPEED BAR */
+  .speed-section { margin: 16px 0; }
+  .speed-row { display: flex; align-items: center; gap: 12px; margin: 10px 0; font-size: 12px; }
+  .speed-label { width: 160px; flex-shrink: 0; font-weight: 600; }
+  .speed-bar-wrap { flex: 1; }
+  .speed-bar { height: 26px; border-radius: 4px; display: flex; align-items: center; padding: 0 10px; font-size: 12px; font-weight: 700; color: #fff; }
+  .speed-time { width: 50px; text-align: right; font-weight: 700; }
+
+  .page-break { page-break-before: always; }
+
+  .footer { text-align: center; color: #aaa; font-size: 11px; margin-top: 48px; padding-top: 20px; border-top: 1px solid #eee; }
+
+  @media print {
+    body { background: #fff; }
+    .page { padding: 20px; max-width: 100%; }
+    .page-break { page-break-before: always; }
+    .section { box-shadow: none; border: 1px solid #ddd; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>BCP vs JDBC — Deep Dive</h1>
+  <div class="subtitle">T24 Init Load · Spark on Kubernetes · So sánh kỹ thuật 2 phương pháp extract</div>
+
+  <!-- OVERVIEW -->
+  <h2>1. Tổng quan</h2>
+  <div class="section">
+    <p style="font-size:13px;line-height:1.8;color:#444">
+      Khi cần extract hàng chục triệu dòng từ SQL Server về MinIO (Parquet), có 2 lựa chọn:
+      <strong>BCP</strong> (Bulk Copy Program — tool native của Microsoft) và
+      <strong>Spark JDBC</strong> (đọc qua JDBC driver, chia partitions).
+      Cả hai đều cho ra cùng kết quả: file Parquet trên MinIO.
+      Nhưng cách đi khác nhau hoàn toàn — dẫn đến tốc độ và resource usage khác nhau.
+    </p>
+    <br>
+    <div class="vs-grid">
+      <div class="vs-box vs-box-bcp">
+        <div class="vs-title vs-title-bcp">BCP — Bulk Copy</div>
+        <div class="vs-item"><span class="vs-icon">✅</span> Native protocol của SQL Server</div>
+        <div class="vs-item"><span class="vs-icon">✅</span> 1 connection, stream liên tục</div>
+        <div class="vs-item"><span class="vs-icon">✅</span> Không qua query planner</div>
+        <div class="vs-item"><span class="vs-icon">✅</span> 0 executor pod — nhẹ cluster</div>
+        <div class="vs-item"><span class="vs-icon">✅</span> ~25s / 100K rows</div>
+        <div class="vs-item"><span class="vs-icon">⚠️</span> Shared lock khi chạy</div>
+      </div>
+      <div class="vs-center">VS</div>
+      <div class="vs-box vs-box-jdbc">
+        <div class="vs-title vs-title-jdbc">JDBC — Spark JDBC</div>
+        <div class="vs-item"><span class="vs-icon">❌</span> Generic protocol, đa năng</div>
+        <div class="vs-item"><span class="vs-icon">❌</span> N connection song song</div>
+        <div class="vs-item"><span class="vs-icon">❌</span> Query plan × N partitions</div>
+        <div class="vs-item"><span class="vs-icon">❌</span> 2 executor pod — nặng hơn</div>
+        <div class="vs-item"><span class="vs-icon">❌</span> ~68s / 100K rows</div>
+        <div class="vs-item"><span class="vs-icon">✅</span> Không giữ shared lock lâu</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BCP FLOW -->
+  <h2>2. Luồng BCP — Chi tiết</h2>
+  <div class="section">
+    <div class="callout callout-green">
+      <strong>Nguyên lý cốt lõi</strong>
+      BCP dùng TDS Bulk Copy Protocol — giao thức riêng của Microsoft thiết kế 1 mục đích duy nhất: move data khối lớn. SQL Server tự push stream liên tục, không cần client hỏi từng batch.
+    </div>
+
+    <h3>Các bước thực hiện</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num"><div class="step-circle c-bcp">1</div><div class="step-line"></div></div>
+        <div class="step-body">
+          <div class="step-title">Spark driver pod khởi động — chạy t24_bcp_extract.py</div>
+          <div class="step-desc">Không có executor. Chỉ 1 pod: 1 core, 2GB RAM.</div>
+          <div class="step-code">subprocess.Popen(["bcp", "SELECT * FROM dbo.FBNK_CATEG_ENTRY", "queryout", ...])</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><div class="step-circle c-bcp">2</div><div class="step-line"></div></div>
+        <div class="step-body">
+          <div class="step-title">BCP mở 1 connection TCP đến SQL Server</div>
+          <div class="step-desc">Handshake TDS 1 lần duy nhất. SQL Server kích hoạt Bulk Copy Engine — code path riêng, bypass query optimizer thông thường.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><div class="step-circle c-bcp">3</div><div class="step-line"></div></div>
+        <div class="step-body">
+          <div class="step-title">SQL Server bắt đầu scan disk tuần tự (sequential scan)</div>
+          <div class="step-desc">Đọc từ page đầu tiên đến page cuối cùng — không skip, không random access. Đây là pattern I/O nhanh nhất với SSD/HDD.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><div class="step-circle c-bcp">4</div><div class="step-line"></div></div>
+        <div class="step-body">
+          <div class="step-title">Stream binary liên tục — không round-trip</div>
+          <div class="step-desc">SQL Server push block liên tục qua TCP. BCP process nhận ngay, không cần gửi "next" request. 0 khoảng chờ giữa các block.</div>
+          <div class="step-code">stream: [block_1][block_2][block_3]...[block_N]  ← liên tục không ngắt</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><div class="step-circle c-bcp">5</div><div class="step-line"></div></div>
+        <div class="step-body">
+          <div class="step-title">Filter stdout → pyarrow → Parquet → MinIO</div>
+          <div class="step-desc">BCP stdout pipe qua grep (lọc dòng status) → pyarrow đọc chunk → encode Parquet → upload MinIO. RAM chỉ giữ 1 chunk tại 1 thời điểm.</div>
+          <div class="step-code">bcp stdout | grep -aP "\t" | pyarrow.open_csv() → write_parquet() → s3a://raw/test_bulk/</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Sơ đồ luồng</h3>
+    <div class="flow">
+<span class="gray">┌─────────────────────────────┐          ┌──────────────────────────────────┐</span>
+<span class="gray">│      SQL SERVER             │  TCP     │   SPARK DRIVER POD (K8s)         │</span>
+<span class="gray">│      (MSSQL)                │          │   1 core · 2GB RAM               │</span>
+<span class="gray">└─────────────────────────────┘          └──────────────────────────────────┘</span>
+
+<span class="green">① BCP kết nối</span>                 <span class="yellow">──────────────────────────────►</span>
+                               <span class="gray">  [TDS handshake — 1 lần duy nhất]</span>
+
+<span class="blue">② SQL Server nhận lệnh</span>
+   Bulk Copy Engine bật
+   Sequential disk scan bắt đầu
+   <span class="gray">╔═══════════════╗</span>
+   <span class="gray">║ Page 1–1000   ║ ──────────────────────────────►</span>  <span class="green">pyarrow nhận chunk 1</span>
+   <span class="gray">║ Page 1001–2000║ ──────────────────────────────►</span>  <span class="green">pyarrow nhận chunk 2</span>
+   <span class="gray">║ Page 2001–3000║ ──────────────────────────────►</span>  <span class="green">encode → Parquet</span>
+   <span class="gray">║ ...           ║ ──────────────────────────────►</span>  <span class="green">upload MinIO</span>
+   <span class="gray">║ Page N        ║ ──────────────────────────────►</span>  <span class="green">pyarrow nhận chunk N</span>
+   <span class="gray">╚═══════════════╝</span>
+
+<span class="gray">                 ↑ push liên tục, không chờ request từ client ↑</span>
+
+<span class="green">③ Done</span>: 1 connection · 0 round-trip · sequential I/O
+    </div>
+  </div>
+
+  <!-- JDBC FLOW -->
+  <h2>3. Luồng JDBC — Chi tiết</h2>
+  <div class="section">
+    <div class="callout callout-red">
+      <strong>Nguyên lý cốt lõi</strong>
+      JDBC là generic protocol — thiết kế cho mọi loại query. Spark phải chia bảng thành N partitions, mỗi executor tự query 1 range. Mỗi batch phải xin thêm từ server — tạo ra hàng nghìn round-trip.
+    </div>
+
+    <h3>Các bước thực hiện</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num"><div class="step-circle c-jdbc">1</div><div class="step-line"></div></div>
+        <div class="step-body">
+          <div class="step-title">Spark driver tính partition boundaries</div>
+          <div class="step-desc">Driver query min/max của partition column → chia thành N range. 2 executor → 2 partitions.</div>
+          <div class="step-code">Partition 1: WHERE id BETWEEN 0        AND 40,000,000
+Partition 2: WHERE id BETWEEN 40,000,001 AND 80,000,000</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><div class="step-circle c-jdbc">2</div><div class="step-line"></div></div>
+        <div class="step-body">
+          <div class="step-title">Spin up 2 executor pods</div>
+          <div class="step-desc">Mỗi executor: 2 core + 2GB RAM. Tổng thêm 4 core + 4GB RAM so với BCP.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><div class="step-circle c-jdbc">3</div><div class="step-line"></div></div>
+        <div class="step-body">
+          <div class="step-title">Mỗi executor mở 1 connection riêng — gửi query</div>
+          <div class="step-desc">SQL Server nhận 2 query đồng thời, tạo 2 query plan, 2 cursor, scan 2 range song song. Buffer pool bị hit từ 2 hướng.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><div class="step-circle c-jdbc">4</div><div class="step-line"></div></div>
+        <div class="step-body">
+          <div class="step-title">Request-response loop — lặp hàng nghìn lần</div>
+          <div class="step-desc">Executor nhận batch → xử lý xong → gửi "next" → chờ server → nhận tiếp. Mỗi batch 10,000 rows → 4,000 round-trip per executor.</div>
+          <div class="step-code">[xin batch] → [chờ] → [nhận 10K rows] → [deserialize] → [xin batch] → [chờ] → ...</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><div class="step-circle c-jdbc">5</div><div class="step-line"></div></div>
+        <div class="step-body">
+          <div class="step-title">Deserialize từng row qua nhiều tầng</div>
+          <div class="step-desc">Mỗi row: SQL Server value → TDS binary → JDBC ResultSet → Java Object → Spark InternalRow → Parquet. Tốn CPU gấp nhiều lần BCP.</div>
+          <div class="step-code">ResultSet.next() → getObject() → InternalRow → UnsafeRow → Parquet encoder</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Sơ đồ luồng</h3>
+    <div class="flow">
+<span class="gray">┌──────────────────────────┐         ┌──────────────────────────────────────────┐</span>
+<span class="gray">│     SQL SERVER           │  TCP    │  SPARK PODS (K8s)                        │</span>
+<span class="gray">│     (MSSQL)              │         │  Driver: 1c·2g │ Exec1: 2c·2g │ Exec2: 2c·2g │</span>
+<span class="gray">└──────────────────────────┘         └──────────────────────────────────────────┘</span>
+
+<span class="yellow">① Driver tính partition:</span>
+                            <span class="gray">◄────────</span> <span class="blue">SELECT min(id), max(id) FROM table</span>
+  min=0, max=80M            <span class="gray">────────►</span>
+                                      <span class="blue">Partition 1: 0–40M  → Executor 1</span>
+                                      <span class="blue">Partition 2: 40M–80M → Executor 2</span>
+
+<span class="yellow">② 2 executor mở 2 connection đồng thời:</span>
+
+  <span class="gray">[Exec 1]</span>                  <span class="gray">◄────────</span> <span class="red">SELECT * WHERE id BETWEEN 0 AND 40M</span>
+  parse query, tạo plan
+  scan range 0–40M
+  batch 1 (10K rows)        <span class="gray">────────►</span> <span class="red">nhận</span> → ResultSet → Java obj → SparkRow
+                            <span class="gray">◄────────</span> <span class="red">xin batch 2</span>
+  batch 2 (10K rows)        <span class="gray">────────►</span> <span class="red">nhận</span> → ResultSet → Java obj → SparkRow
+                            <span class="gray">◄────────</span> <span class="red">xin batch 3</span>
+  <span class="orange">... lặp 4,000 lần ...</span>
+
+  <span class="gray">[Exec 2]</span>                  <span class="gray">◄────────</span> <span class="red">SELECT * WHERE id BETWEEN 40M AND 80M</span>
+  <span class="orange">... lặp 4,000 lần tương tự ...</span>
+
+<span class="gray">              ↑ mỗi lần nhận xong phải XIN THÊM — 8,000 round-trip tổng ↑</span>
+
+<span class="red">③ Tầng deserialize:</span>
+   SQL value → TDS → JDBC ResultSet → Java Object → Spark InternalRow → Parquet
+   <span class="gray">   (5 tầng chuyển đổi per row × 80,000,000 rows)</span>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- SO SANH TRUC QUAN -->
+  <h2>4. So sánh trực quan — Timeline</h2>
+  <div class="section">
+
+    <h3>Round-trip pattern</h3>
+    <div class="flow">
+<span class="white">BCP:</span>
+<span class="gray">Time ──────────────────────────────────────────────────────────────────────────►</span>
+     <span class="green">████████████████████████████████████████████████████████████████████████</span>
+     <span class="gray">↑ stream liên tục — 0 khoảng chờ ↑</span>
+
+<span class="white">JDBC (1 executor):</span>
+<span class="gray">Time ──────────────────────────────────────────────────────────────────────────►</span>
+     <span class="blue">███</span><span class="orange">░</span><span class="blue">███</span><span class="orange">░</span><span class="blue">███</span><span class="orange">░</span><span class="blue">███</span><span class="orange">░</span><span class="blue">███</span><span class="orange">░</span><span class="blue">███</span><span class="orange">░</span><span class="blue">███</span><span class="orange">░</span><span class="blue">███</span><span class="orange">░</span><span class="blue">███</span><span class="orange">░</span><span class="blue">███</span><span class="orange">░</span><span class="blue">███</span><span class="orange">░</span>
+     <span class="blue">███</span> = nhận data    <span class="orange">░░░</span> = chờ round-trip (lãng phí)
+     × 4,000 lần
+    </div>
+
+    <h3>Extract duration thực tế (testdb — 100K rows/bảng)</h3>
+    <div class="speed-section">
+      <div class="speed-row">
+        <div class="speed-label">FBNK_CATEG_ENTRY</div>
+        <div class="speed-bar-wrap">
+          <div style="display:flex;height:26px;border-radius:4px;overflow:hidden;gap:2px">
+            <div class="speed-bar bar-bcp" style="width:26%">BCP 26s</div>
+            <div class="speed-bar bar-jdbc" style="width:62%; background:#e94560">JDBC 62s</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#888;width:50px;text-align:right">2.4×</div>
+      </div>
+      <div class="speed-row">
+        <div class="speed-label">FBNK_STMT_ENTRY_DETAIL</div>
+        <div class="speed-bar-wrap">
+          <div style="display:flex;height:26px;border-radius:4px;overflow:hidden;gap:2px">
+            <div class="speed-bar bar-bcp" style="width:27%">BCP 27s</div>
+            <div class="speed-bar bar-jdbc" style="width:80%;background:#e94560">JDBC 80s</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#888;width:50px;text-align:right">3.0×</div>
+      </div>
+      <div class="speed-row">
+        <div class="speed-label">FBNK_STMT_ENTRY</div>
+        <div class="speed-bar-wrap">
+          <div style="display:flex;height:26px;border-radius:4px;overflow:hidden;gap:2px">
+            <div class="speed-bar bar-bcp" style="width:25%">BCP 25s</div>
+            <div class="speed-bar bar-jdbc" style="width:61%;background:#e94560">JDBC 61s</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#888;width:50px;text-align:right">2.4×</div>
+      </div>
+      <div class="speed-row">
+        <div class="speed-label">FBNK_CATEG_ENTRY_DETAIL</div>
+        <div class="speed-bar-wrap">
+          <div style="display:flex;height:26px;border-radius:4px;overflow:hidden;gap:2px">
+            <div class="speed-bar bar-bcp" style="width:25%">BCP 25s</div>
+            <div class="speed-bar bar-jdbc" style="width:56%;background:#e94560">JDBC 56s</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#888;width:50px;text-align:right">2.2×</div>
+      </div>
+      <div class="speed-row">
+        <div class="speed-label">FBNK_AA_PROCESS_DETAILS</div>
+        <div class="speed-bar-wrap">
+          <div style="display:flex;height:26px;border-radius:4px;overflow:hidden;gap:2px">
+            <div class="speed-bar bar-bcp" style="width:23%">BCP 23s</div>
+            <div class="speed-bar bar-jdbc" style="width:80%;background:#e94560">JDBC 80s</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#888;width:50px;text-align:right">3.5×</div>
+      </div>
+      <div class="speed-row" style="margin-top:12px;padding-top:12px;border-top:2px solid #eee">
+        <div class="speed-label"><strong>Avg (100K rows)</strong></div>
+        <div class="speed-bar-wrap">
+          <div style="display:flex;height:30px;border-radius:4px;overflow:hidden;gap:2px">
+            <div class="speed-bar bar-bcp" style="width:25%;font-size:13px"><strong>~25s</strong></div>
+            <div class="speed-bar bar-jdbc" style="width:68%;background:#e94560;font-size:13px"><strong>~68s</strong></div>
+          </div>
+        </div>
+        <div style="font-size:13px;font-weight:700;color:#e94560;width:50px;text-align:right">~2.7×</div>
+      </div>
+    </div>
+    <p style="font-size:11px;color:#888;margin-top:8px">
+      DAG run BCP: <code>pull_bulk · manual__2026-06-23T11:29:23</code> · image spark-t24:build-156<br>
+      DAG run JDBC: <code>pull_jdbc · manual__2026-06-24T02:01:04</code> · image spark-t24:build-156 · 2 executor × 2 core
+    </p>
+  </div>
+
+  <!-- RESOURCE -->
+  <h2>5. So sánh Resource</h2>
+  <div class="section">
+    <table>
+      <tr>
+        <th>Resource</th>
+        <th>BCP</th>
+        <th>JDBC</th>
+        <th>Winner</th>
+      </tr>
+      <tr>
+        <td><strong>Spark pods</strong></td>
+        <td>1 driver pod</td>
+        <td>1 driver + 2 executor pods</td>
+        <td class="win">BCP</td>
+      </tr>
+      <tr>
+        <td><strong>RAM (Spark)</strong></td>
+        <td>~2GB</td>
+        <td>~6GB (2g + 2×2g)</td>
+        <td class="win">BCP 3×</td>
+      </tr>
+      <tr>
+        <td><strong>CPU (Spark)</strong></td>
+        <td>~1 core · gần idle</td>
+        <td>~5 core (1 + 2×2)</td>
+        <td class="win">BCP 5×</td>
+      </tr>
+      <tr>
+        <td><strong>CPU (DB)</strong></td>
+        <td>Thấp — 1 scan, bulk engine</td>
+        <td>Cao hơn — N query plan, N cursor</td>
+        <td class="win">BCP</td>
+      </tr>
+      <tr>
+        <td><strong>Disk I/O (DB)</strong></td>
+        <td>Sequential scan 1 lần</td>
+        <td>N range scan song song</td>
+        <td class="win">BCP</td>
+      </tr>
+      <tr>
+        <td><strong>Network</strong></td>
+        <td>1 stream liên tục</td>
+        <td>N stream đồng thời</td>
+        <td class="win">BCP</td>
+      </tr>
+      <tr>
+        <td><strong>DB Lock</strong></td>
+        <td>Shared lock toàn bảng (lâu)</td>
+        <td>Row-level, phân tán</td>
+        <td class="win">JDBC</td>
+      </tr>
+      <tr>
+        <td><strong>Bottleneck</strong></td>
+        <td>Disk I/O + Network</td>
+        <td>CPU deserialize + round-trip</td>
+        <td>—</td>
+      </tr>
+    </table>
+
+    <div class="callout callout-orange" style="margin-top:16px">
+      <strong>Lưu ý về Lock</strong>
+      BCP giữ shared lock toàn bảng trong suốt quá trình export (~30–45 phút với 80M rows). Mọi INSERT/UPDATE từ T24 sẽ bị block. Giải pháp: chạy sau COB ngoài giờ hành chính, hoặc dùng <code>WITH (NOLOCK)</code> (chấp nhận dirty read, CDC sẽ bù sau).
+    </div>
+  </div>
+
+  <!-- TẠI SAO BCP NHANH HƠN -->
+  <h2>6. Tại sao BCP nhanh hơn — 3 lý do cốt lõi</h2>
+  <div class="section">
+
+    <h3>Lý do 1 — Protocol native vs generic</h3>
+    <div class="flow">
+<span class="white">JDBC path (5 tầng):</span>
+SQL Server value
+  <span class="gray">→</span> <span class="red">TDS encoding</span>
+  <span class="gray">→</span> <span class="red">JDBC driver decode (Java)</span>
+  <span class="gray">→</span> <span class="red">Java Object (ResultSet)</span>
+  <span class="gray">→</span> <span class="red">Spark InternalRow</span>
+  <span class="gray">→</span> <span class="red">Parquet encoder</span>
+  <span class="gray">→</span> MinIO
+
+<span class="white">BCP path (2 tầng):</span>
+SQL Server value
+  <span class="gray">→</span> <span class="green">TDS binary stream (native)</span>
+  <span class="gray">→</span> <span class="green">pyarrow decode + Parquet</span>
+  <span class="gray">→</span> MinIO
+    </div>
+    <p style="font-size:13px;color:#555;line-height:1.7">Mỗi tầng serialize/deserialize tốn CPU và memory copy. BCP ít tầng hơn = ít overhead hơn × 80,000,000 rows.</p>
+
+    <h3>Lý do 2 — 0 round-trip vs 8,000 round-trip</h3>
+    <div class="flow">
+<span class="white">JDBC — mỗi batch 10K rows phải xin thêm:</span>
+[xin]──<span class="orange">chờ</span>──[nhận]──[xin]──<span class="orange">chờ</span>──[nhận]──[xin]──<span class="orange">chờ</span>──[nhận]── × 4,000 lần per executor
+        <span class="orange">↑↑↑            ↑↑↑            ↑↑↑</span>
+      <span class="orange">latency        latency        latency  ← thời gian lãng phí</span>
+
+<span class="white">BCP — server tự push, không cần hỏi:</span>
+[kết nối 1 lần]──<span class="green">████████████████████████████████████████</span>── done
+                  <span class="green">↑ stream liên tục, 0 khoảng dừng ↑</span>
+    </div>
+
+    <h3>Lý do 3 — Sequential I/O vs Random I/O</h3>
+    <div class="flow">
+<span class="white">BCP — 1 scan từ đầu đến cuối:</span>
+Disk: <span class="green">[Page 1][Page 2][Page 3][Page 4]...[Page N]</span>  ← sequential, nhanh nhất
+      <span class="green">──────────────────────────────────────────►</span>
+
+<span class="white">JDBC — 2 executor scan 2 range song song:</span>
+Disk: <span class="red">[Page 1]</span>          <span class="red">[Page N/2]</span>
+      <span class="red">──────────────►</span>   <span class="red">──────────────►</span>  ← 2 luồng cùng lúc
+      Exec 1             Exec 2
+      <span class="gray">→ disk phải phục vụ 2 vị trí đồng thời → overhead seek</span>
+    </div>
+  </div>
+
+  <!-- KHI NAO DUNG CAI NAO -->
+  <h2>7. Khi nào dùng BCP, khi nào dùng JDBC?</h2>
+  <div class="section">
+    <table>
+      <tr>
+        <th>Tình huống</th>
+        <th>Dùng BCP</th>
+        <th>Dùng JDBC</th>
+      </tr>
+      <tr>
+        <td>Init load hàng chục triệu rows</td>
+        <td class="win">✅ Tốt hơn nhiều</td>
+        <td class="lose">❌ Chậm, tốn resource</td>
+      </tr>
+      <tr>
+        <td>Extract incremental (vài nghìn rows)</td>
+        <td>⚠️ Overhead setup lớn</td>
+        <td class="win">✅ Nhanh hơn cho data nhỏ</td>
+      </tr>
+      <tr>
+        <td>Chạy trong giờ hành chính</td>
+        <td class="lose">❌ Shared lock block T24</td>
+        <td class="win">✅ Row-level lock, ít ảnh hưởng</td>
+      </tr>
+      <tr>
+        <td>SQL Server không có mssql-tools</td>
+        <td class="lose">❌ Không dùng được</td>
+        <td class="win">✅ Chỉ cần JDBC driver</td>
+      </tr>
+      <tr>
+        <td>Complex WHERE / filter trước extract</td>
+        <td>⚠️ Được nhưng không tối ưu</td>
+        <td class="win">✅ Query plan tối ưu filter</td>
+      </tr>
+      <tr>
+        <td>Cluster ít resource (RAM/CPU)</td>
+        <td class="win">✅ Chỉ cần 1 pod nhỏ</td>
+        <td class="lose">❌ Cần executor pods</td>
+      </tr>
+    </table>
+
+    <div class="callout callout-blue" style="margin-top:16px">
+      <strong>Quyết định trong project này</strong>
+      Init load T24 → BCP. 5 bảng × ~80M rows prod → BCP nhanh hơn ~2.7× và nhẹ cluster hơn ~3×. Chạy sau COB, ngoài giờ hành chính, với NOLOCK + CDC bù gap sau.
+    </div>
+  </div>
+
+  <div class="footer">
+    BCP vs JDBC Deep Dive · T24 Init Load Planning · BNCTL Data Platform · 2026-06-24
+  </div>
+
+</div>
+</body>
+</html>

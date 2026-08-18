@@ -5,9 +5,7 @@
 !README.md
 !deployment/README.md
 !spark/manifests/guide_for_dev.md
-!arch/ADD_DBT_MODEL_TO_COB.md
-!arch/COB_E2E_TEST_RUNBOOK.md
-!arch/COB_PIPELINE_FLOW_DESCRIPTION.md
+!arch/*.md
 !kafka/uat/CLUSTER_DEPLOYMENT.md
 CLAUDE.md
 
@@ -75,7 +73,7 @@ Thumbs.db
 !T24_ACCOUNTING/seeds/*.csv
 *.json
 *.html
-!arch/REPLAY_RERUN_GUIDE.html
+!arch/*.html
 *.txt
 !jenkins/plugins.txt
 !kafka/uat/*.txt
