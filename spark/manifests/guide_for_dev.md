@@ -2,7 +2,7 @@
 
 Hướng dẫn cho dev thêm 1 bảng T24 vào luồng CDC (Debezium → Kafka → Spark streaming → Bronze Iceberg).
 
-> Namespace: Spark = `bnctl-spark2-development-ns`, Kafka/MSSQL = `bnctl-kafka-development-ns`.
+> Namespace: Spark = `spark2-development-ns`, Kafka/MSSQL = `kafka-development-ns`.
 > File interface dev sửa: `spark/manifests/cdc-tables.yaml`.
 
 ## Điều kiện
@@ -42,7 +42,7 @@ X=t24.testdb.dbo.FBNK_X:hive.bronze.t24_x
 Định dạng: `NAME=t24.<db>.<schema>.<TABLE>:hive.bronze.t24_<ten>`. Rồi:
 ```bash
 kubectl apply -f spark/manifests/cdc-tables.yaml
-kubectl -n bnctl-spark2-development-ns delete sparkapplication t24-cob-streaming
+kubectl -n spark2-development-ns delete sparkapplication t24-cob-streaming
 kubectl apply -f spark/manifests/t24-cob-streaming.yaml      # resume từ checkpoint
 ```
 
@@ -91,7 +91,7 @@ Dùng khi lấy bảng theo batch (JDBC) thay vì CDC realtime. Mỗi bảng = 2
 4. **Chạy** (parse SAU khi extract COMPLETED):
    ```bash
    kubectl apply -f spark/manifests/t24-extract-account.yaml
-   kubectl -n bnctl-spark2-development-ns wait --for=jsonpath='{.status.applicationState.state}'=COMPLETED sparkapplication/t24-extract-account --timeout=900s
+   kubectl -n spark2-development-ns wait --for=jsonpath='{.status.applicationState.state}'=COMPLETED sparkapplication/t24-extract-account --timeout=900s
    kubectl apply -f spark/manifests/t24-parse-account.yaml
    ```
 5. **Verify**: như mục Verify (Dremio `REFRESH METADATA` + count bronze).

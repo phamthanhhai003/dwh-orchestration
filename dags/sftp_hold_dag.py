@@ -38,13 +38,13 @@ from lib import kafka_lag
 
 CONN_ID         = "cob_control_conn"
 MINIO_CONN_ID   = "minio_conn"
-SPARK_NS        = Variable.get("SPARK_NAMESPACE", default_var="bnctl-spark2-development-ns")
+SPARK_NS        = Variable.get("SPARK_NAMESPACE", default_var="spark2-development-ns")
 HOLD_CONTROL    = "hive.bronze.hold_control"      # bronze (physical MSSQL = F_HOLD_CONTROL)
 HOLD_TOPIC      = "t24.testdb.dbo.F_HOLD_CONTROL"  # Debezium topic của manifest table
 MANIFEST_BUCKET = Variable.get("SFTP_MANIFEST_BUCKET", default_var="spark-scripts")
 KAFKA_BOOTSTRAP = Variable.get(
     "kafka_bootstrap",
-    default_var="cdc-kafka-bootstrap.bnctl-kafka-development-ns.svc.cluster.local:9092")
+    default_var="cdc-kafka-bootstrap.kafka-development-ns.svc.cluster.local:9092")
 CKPT_PREFIX     = Variable.get("cob_checkpoint_prefix", default_var="t24-cob-v3")
 
 # report → (bronze table, parser yaml). CRF/CRC dùng accounting parser (GL/PL text, CRF per-branch /

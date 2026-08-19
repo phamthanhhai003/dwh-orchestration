@@ -13,9 +13,9 @@ from airflow.models import Variable
 from airflow.operators.empty import EmptyOperator
 from airflow.providers.cncf.kubernetes.operators.spark_kubernetes import SparkKubernetesOperator
 
-SPARK_NS  = Variable.get("SPARK_NAMESPACE", default_var="bnctl-spark2-development-ns")
+SPARK_NS  = Variable.get("SPARK_NAMESPACE", default_var="spark2-development-ns")
 SPARK_IMG = "congtvjits/spark-t24:v3"
-MSSQL_URL = Variable.get("T24_MSSQL_URL", default_var="jdbc:sqlserver://mssql.bnctl-kafka-development-ns.svc.cluster.local:1433;databaseName=testdb;encrypt=false")
+MSSQL_URL = Variable.get("T24_MSSQL_URL", default_var="jdbc:sqlserver://mssql.kafka-development-ns.svc.cluster.local:1433;databaseName=testdb;encrypt=false")
 SS_PATH   = "s3a://spark-scripts/t24/ss_full.json"
 
 # ── THÊM BẢNG Ở ĐÂY ──────────────────────────────────────────────────────────

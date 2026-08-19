@@ -32,11 +32,11 @@ from lib import etl_control as ctl
 from lib import t24_sources
 
 CONN_ID   = "cob_control_conn"
-SPARK_NS  = Variable.get("SPARK_NAMESPACE", default_var="bnctl-spark2-development-ns")
+SPARK_NS  = Variable.get("SPARK_NAMESPACE", default_var="spark2-development-ns")
 _DAG_DIR      = os.path.dirname(os.path.abspath(__file__))
 _AIRFLOW_HOME = os.path.dirname(_DAG_DIR)
 
-_BCP_SERVER   = "mssql.bnctl-kafka-development-ns.svc.cluster.local"
+_BCP_SERVER   = "mssql.kafka-development-ns.svc.cluster.local"
 _BCP_DATABASE = "testdb"
 
 _BCP_ENV = [
@@ -47,7 +47,7 @@ _BCP_ENV = [
     V1EnvVar(name="AWS_SECRET_ACCESS_KEY",
              value_from=V1EnvVarSource(secret_key_ref=V1SecretKeySelector(name="minio-credentials", key="AWS_SECRET_ACCESS_KEY"))),
     V1EnvVar(name="AWS_REGION", value="us-east-1"),
-    V1EnvVar(name="MINIO_ENDPOINT", value="http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"),
+    V1EnvVar(name="MINIO_ENDPOINT", value="http://minio.minio-development-ns.svc.cluster.local:9000"),
 ]
 
 _BCP_VOLUMES = [V1Volume(name="bcp-script", config_map=V1ConfigMapVolumeSource(name="t24-bcp-extract-script"))]

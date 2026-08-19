@@ -8,7 +8,7 @@ apiVersion: "sparkoperator.k8s.io/v1beta2"
 kind: SparkApplication
 metadata:
   name: t24-parse-ft
-  namespace: bnctl-spark2-development-ns
+  namespace: spark2-development-ns
 spec:
   type: Python
   mode: cluster
@@ -32,16 +32,16 @@ spec:
     "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions"
     "spark.sql.catalog.hive": "org.apache.iceberg.spark.SparkCatalog"
     "spark.sql.catalog.hive.type": "hive"
-    "spark.sql.catalog.hive.uri": "thrift://hive-metastore.bnctl-hive-development-ns.svc.cluster.local:9083"
+    "spark.sql.catalog.hive.uri": "thrift://hive-metastore.hive-development-ns.svc.cluster.local:9083"
     "spark.sql.catalog.hive.warehouse": "s3a://hive-warehouse"
     "spark.sql.defaultCatalog": "hive"
     "spark.sql.catalog.hive.io-impl": "org.apache.iceberg.aws.s3.S3FileIO"
     "spark.sql.catalog.hive.client.region": "us-east-1"
-    "spark.sql.catalog.hive.s3.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.sql.catalog.hive.s3.endpoint": "http://minio.minio-development-ns.svc.cluster.local:9000"
     "spark.sql.catalog.hive.s3.path-style-access": "true"
     # Credentials KHONG hardcode: s3a doc qua EnvironmentVariableCredentialsProvider,
     # Iceberg S3FileIO doc qua AWS SDK default chain — ca 2 lay env AWS_* (Secret minio-credentials).
-    "spark.hadoop.fs.s3a.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.hadoop.fs.s3a.endpoint": "http://minio.minio-development-ns.svc.cluster.local:9000"
     "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.EnvironmentVariableCredentialsProvider"
     "spark.hadoop.fs.s3a.path.style.access": "true"
     "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"

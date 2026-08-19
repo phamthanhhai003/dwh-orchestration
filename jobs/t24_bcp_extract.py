@@ -11,14 +11,14 @@ Image requirements (congtvjits/bcp-t24:v1):
 
 Usage:
     t24_bcp_extract.py \
-        --server mssql.bnctl-kafka-development-ns.svc.cluster.local \
+        --server mssql.kafka-development-ns.svc.cluster.local \
         --database testdb \
         --table dbo.FBNK_CATEG_ENTRY \
         --output s3a://raw/t24/FBNK_CATEG_ENTRY/2026-06-23/
 
 Env:
     MSSQL_PASSWORD, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
-    MINIO_ENDPOINT  (default: http://minio.bnctl-minio-development-ns.svc.cluster.local:9000)
+    MINIO_ENDPOINT  (default: http://minio.minio-development-ns.svc.cluster.local:9000)
     BCP_CHUNK_ROWS  (default: 500000)
 """
 from __future__ import annotations
@@ -48,7 +48,7 @@ import pyarrow.parquet as pq
 CHUNK_ROWS = int(os.environ.get("BCP_CHUNK_ROWS", "500000"))
 _MINIO_ENDPOINT = os.environ.get(
     "MINIO_ENDPOINT",
-    "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000",
+    "http://minio.minio-development-ns.svc.cluster.local:9000",
 )
 
 

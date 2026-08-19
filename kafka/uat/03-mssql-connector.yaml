@@ -16,7 +16,7 @@ apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaConnector
 metadata:
   name: mssql-source-connector
-  namespace: bnctl-kafka-uat-ns
+  namespace: kafka-uat-ns
   labels:
     strimzi.io/cluster: debezium-connect
 spec:

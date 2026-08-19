@@ -10,7 +10,7 @@ apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaNodePool
 metadata:
   name: controller
-  namespace: bnctl-kafka-development-ns
+  namespace: kafka-development-ns
   labels:
     strimzi.io/cluster: cdc
 spec:
@@ -40,7 +40,7 @@ apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaNodePool
 metadata:
   name: broker
-  namespace: bnctl-kafka-development-ns
+  namespace: kafka-development-ns
   labels:
     strimzi.io/cluster: cdc
 spec:
@@ -67,7 +67,7 @@ apiVersion: kafka.strimzi.io/v1beta2
 kind: Kafka
 metadata:
   name: cdc
-  namespace: bnctl-kafka-development-ns
+  namespace: kafka-development-ns
   annotations:
     strimzi.io/node-pools: enabled
     strimzi.io/kraft: enabled

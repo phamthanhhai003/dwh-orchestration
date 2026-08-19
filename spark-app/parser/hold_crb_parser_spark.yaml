@@ -2,7 +2,7 @@ apiVersion: "sparkoperator.k8s.io/v1beta2"
 kind: SparkApplication
 metadata:
   name: "hold-crb-parser-{{ params.slug }}-job"
-  namespace: "{{ var.value.get('SPARK_NAMESPACE', 'bnctl-spark2-development-ns') }}"
+  namespace: "{{ var.value.get('SPARK_NAMESPACE', 'spark2-development-ns') }}"
 spec:
   type: Python
   mode: cluster

@@ -1,7 +1,7 @@
 # MSSQL 2022 trong cluster — FIXTURE de test CDC (KHONG dung cho prod).
 # - MSSQL_AGENT_ENABLED=true : BAT BUOC cho CDC (Debezium doc CDC qua agent jobs)
 # - longhorn PVC cho /var/opt/mssql
-# - Service ClusterIP 1433 => pod Debezium ket noi qua DNS: mssql.bnctl-kafka-development-ns.svc.cluster.local
+# - Service ClusterIP 1433 => pod Debezium ket noi qua DNS: mssql.kafka-development-ns.svc.cluster.local
 # - SA_PASSWORD KHONG inline o day — Secret mssql-sa-secret apply rieng tu
 #   kafka/mssql-dev-secret.example.yaml (apply TRUOC khi apply file nay).
 ---
@@ -9,7 +9,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mssql-data
-  namespace: bnctl-kafka-development-ns
+  namespace: kafka-development-ns
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: longhorn
@@ -21,7 +21,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mssql
-  namespace: bnctl-kafka-development-ns
+  namespace: kafka-development-ns
   labels:
     app: mssql
 spec:
@@ -80,7 +80,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mssql
-  namespace: bnctl-kafka-development-ns
+  namespace: kafka-development-ns
   labels:
     app: mssql
 spec:

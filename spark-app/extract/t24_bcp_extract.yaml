@@ -5,7 +5,7 @@ apiVersion: "sparkoperator.k8s.io/v1beta2"
 kind: SparkApplication
 metadata:
   name: "bcp-extract-{{ params.slug }}-{{ macros.uuid.uuid4().hex[:10] }}"
-  namespace: "{{ var.value.get('SPARK_NAMESPACE', 'bnctl-spark2-development-ns') }}"
+  namespace: "{{ var.value.get('SPARK_NAMESPACE', 'spark2-development-ns') }}"
 spec:
   type: Python
   mode: cluster
@@ -15,7 +15,7 @@ spec:
   mainApplicationFile: "local:///opt/jobs/t24_bcp_extract.py"
   arguments:
     - "--server"
-    - "mssql.bnctl-kafka-development-ns.svc.cluster.local"
+    - "mssql.kafka-development-ns.svc.cluster.local"
     - "--database"
     - "testdb"
     - "--table"
@@ -30,7 +30,7 @@ spec:
   sparkConf:
     "spark.driver.extraClassPath": "/opt/spark/jars/*"
     "spark.executor.extraClassPath": "/opt/spark/jars/*"
-    "spark.hadoop.fs.s3a.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.hadoop.fs.s3a.endpoint": "http://minio.minio-development-ns.svc.cluster.local:9000"
     "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.EnvironmentVariableCredentialsProvider"
     "spark.hadoop.fs.s3a.path.style.access": "true"
     "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
@@ -54,7 +54,7 @@ spec:
       - name: AWS_REGION
         value: "us-east-1"
       - name: MINIO_ENDPOINT
-        value: "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+        value: "http://minio.minio-development-ns.svc.cluster.local:9000"
   executor:
     cores: 1
     instances: 1

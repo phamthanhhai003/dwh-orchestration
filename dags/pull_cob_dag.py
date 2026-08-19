@@ -49,13 +49,13 @@ from lib import etl_control as ctl
 from lib import t24_sources
 
 CONN_ID     = "cob_control_conn"
-SPARK_NS    = Variable.get("SPARK_NAMESPACE", default_var="bnctl-spark2-development-ns")
+SPARK_NS    = Variable.get("SPARK_NAMESPACE", default_var="spark2-development-ns")
 
 # ── BCP extract (mirror pull_bulk_dag): plain pod chạy t24_bcp_extract.py (TDS bulk copy,
 # ~5-10x JDBC, KHÔNG Spark, KHÔNG pin worker-02). Output parquet RECID/XMLRECORD về RAW path
 # mà t24_pull_parse.yaml đọc (s3a://raw/t24/<TABLE>/<D>/) → parse→hive.bronze GIỮ NGUYÊN.
 _BCP_IMAGE    = "congtvjits/spark-t24:build-156"
-_BCP_SERVER   = "mssql.bnctl-kafka-development-ns.svc.cluster.local"
+_BCP_SERVER   = "mssql.kafka-development-ns.svc.cluster.local"
 _BCP_DATABASE = "testdb"
 _BCP_ENV = [
     V1EnvVar(name="MSSQL_PASSWORD",
@@ -65,7 +65,7 @@ _BCP_ENV = [
     V1EnvVar(name="AWS_SECRET_ACCESS_KEY",
              value_from=V1EnvVarSource(secret_key_ref=V1SecretKeySelector(name="minio-credentials", key="AWS_SECRET_ACCESS_KEY"))),
     V1EnvVar(name="AWS_REGION", value="us-east-1"),
-    V1EnvVar(name="MINIO_ENDPOINT", value="http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"),
+    V1EnvVar(name="MINIO_ENDPOINT", value="http://minio.minio-development-ns.svc.cluster.local:9000"),
 ]
 _BCP_VOLUMES = [V1Volume(name="bcp-script", config_map=V1ConfigMapVolumeSource(name="t24-bcp-extract-script"))]
 _BCP_MOUNTS  = [V1VolumeMount(name="bcp-script", mount_path="/opt/jobs/t24_bcp_extract.py", sub_path="t24_bcp_extract.py", read_only=True)]

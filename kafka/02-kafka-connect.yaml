@@ -7,7 +7,7 @@ apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaConnect
 metadata:
   name: debezium-connect
-  namespace: bnctl-kafka-development-ns
+  namespace: kafka-development-ns
   annotations:
     strimzi.io/use-connector-resources: "true"
 spec:

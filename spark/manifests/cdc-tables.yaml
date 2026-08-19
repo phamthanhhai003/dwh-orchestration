@@ -6,7 +6,7 @@
 #   NAME=t24.<db>.<schema>.<TABLE>:hive.bronze.t24_<ten>   ('#'=comment, dong trong bo qua)
 # Sau khi sua:
 #   kubectl apply -f spark/manifests/cdc-tables.yaml
-#   kubectl -n bnctl-spark2-development-ns delete sparkapplication t24-cob-streaming
+#   kubectl -n spark2-development-ns delete sparkapplication t24-cob-streaming
 #   kubectl apply -f spark/manifests/t24-cob-streaming.yaml
 # Nho: con phai them bang vao table.include.list o kafka/03-mssql-connector.yaml (xem guide).
 # ============================================================================
@@ -14,7 +14,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata: 
   name: t24-cdc-tables
-  namespace: bnctl-spark2-development-ns
+  namespace: spark2-development-ns
 data:
   tables.txt: |
     BATCH=t24.testdb.dbo.F_BATCH:hive.bronze.t24_batch

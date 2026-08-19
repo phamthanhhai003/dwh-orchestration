@@ -7,7 +7,7 @@ pipeline {
     }
 
     environment {
-        NAMESPACE       = "bnctl-airflow-uat-ns"
+        NAMESPACE       = "airflow-uat-ns"
         IMAGE_REPO      = "haiptjits/dwh-uat"
         IMAGE_TAG       = "airflow--uat-build-${BUILD_NUMBER}"
         BUILD_JOB       = "build-airflow-image-${BUILD_NUMBER}"
@@ -75,7 +75,7 @@ spec:
               chmod 600 /root/.ssh/id_rsa
               echo "[altssh.gitlab.com]:443 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFSMqzJeV9rUzU4kWitGjeR4PWSa29SPqJ1fVkhtj3Hw9xjLVXVYrU9QlYWrOLXBpQ6KWjbjTDTdDkoohFzgbEY=" >> /root/.ssh/known_hosts
               echo "[altssh.gitlab.com]:443 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAfuCHKVTjquxvt6CM6tdG4SLp1Btn/nOeHHE5UOzRdf" >> /root/.ssh/known_hosts
-              git clone --depth 1 -b ${BRANCH} ssh://git@altssh.gitlab.com:443/neonstudio/bnctl-data-warehouse/airflow_orchestration.git /workspace
+              git clone --depth 1 -b ${BRANCH} ssh://git@altssh.gitlab.com:443/neonstudio/data-warehouse/airflow_orchestration.git /workspace
           volumeMounts:
             - name: workspace
               mountPath: /workspace

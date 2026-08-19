@@ -23,7 +23,7 @@ from lib import etl_control as ctl
 from lib import t24_sources
 
 CONN_ID     = "cob_control_conn"
-SPARK_NS    = Variable.get("SPARK_NAMESPACE", default_var="bnctl-spark2-development-ns")
+SPARK_NS    = Variable.get("SPARK_NAMESPACE", default_var="spark2-development-ns")
 
 TABLES = [
     "FBNK_CATEG_ENTRY",

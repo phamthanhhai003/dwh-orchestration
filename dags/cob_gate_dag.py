@@ -31,7 +31,7 @@ PROGRESS_TABLE = "hive.bronze.etl_stream_progress"
 # Nhánh B (im table): cấu hình Kafka + checkpoint Spark trên MinIO.
 KAFKA_BOOTSTRAP = Variable.get(
     "kafka_bootstrap",
-    default_var="cdc-kafka-bootstrap.bnctl-kafka-development-ns.svc.cluster.local:9092")
+    default_var="cdc-kafka-bootstrap.kafka-development-ns.svc.cluster.local:9092")
 CKPT_PREFIX = Variable.get("cob_checkpoint_prefix", default_var="t24-cob-v3")
 # Bảng CDC mà downstream cần gate+pin = HỢP của mọi domain (batch chỉ là marker).
 #   demo cần: account+customer. aml cần thêm: stmt_entry (9k/aot).

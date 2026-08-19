@@ -26,7 +26,7 @@ Thiết kế: `arch/PIPELINE_ORCHESTRATION_DESIGN.md`. Kết quả demo: `arch/E
 
 > 🔐 **KHÔNG hardcode cred.** Lấy từ Airflow Variables/Connections + k8s Secret. Export ra env trước:
 > ```bash
-> NS=bnctl-airflow-development-ns; SPK=bnctl-spark2-development-ns; KAF=bnctl-kafka-development-ns
+> NS=airflow-development-ns; SPK=spark2-development-ns; KAF=kafka-development-ns
 > SCHED=$(kubectl -n $NS get pods -o name | grep scheduler | grep -v prepull | head -1 | cut -d/ -f2)
 > MSSQL=$(kubectl -n $KAF get pods -o name | grep mssql | head -1 | cut -d/ -f2)
 > MOCK=$(kubectl -n $NS get pods -o name | grep mock-sftp | head -1 | cut -d/ -f2)

@@ -9,7 +9,7 @@ apiVersion: "sparkoperator.k8s.io/v1beta2"
 kind: SparkApplication
 metadata:
   name: t24-extract-ft
-  namespace: bnctl-spark2-development-ns
+  namespace: spark2-development-ns
 spec:
   type: Python
   mode: cluster
@@ -19,7 +19,7 @@ spec:
   mainApplicationFile: "local:///opt/jobs/t24_jdbc_extract.py"
   arguments:
     - "--url"
-    - "jdbc:sqlserver://mssql.bnctl-kafka-development-ns.svc.cluster.local:1433;databaseName=testdb;encrypt=false"
+    - "jdbc:sqlserver://mssql.kafka-development-ns.svc.cluster.local:1433;databaseName=testdb;encrypt=false"
     - "--dbtable"
     - "dbo.FBNK_FUNDS_TRANSFER"
     - "--user"
@@ -42,7 +42,7 @@ spec:
     "spark.driver.extraClassPath": "/opt/spark/jars/*"
     "spark.executor.extraClassPath": "/opt/spark/jars/*"
     # Credentials KHONG hardcode: s3a doc qua EnvironmentVariableCredentialsProvider (env AWS_*).
-    "spark.hadoop.fs.s3a.endpoint": "http://minio.bnctl-minio-development-ns.svc.cluster.local:9000"
+    "spark.hadoop.fs.s3a.endpoint": "http://minio.minio-development-ns.svc.cluster.local:9000"
     "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.EnvironmentVariableCredentialsProvider"
     "spark.hadoop.fs.s3a.path.style.access": "true"
     "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"

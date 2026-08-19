@@ -15,7 +15,7 @@ apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaConnector
 metadata:
   name: mssql-source-connector
-  namespace: bnctl-kafka-development-ns
+  namespace: kafka-development-ns
   labels:
     strimzi.io/cluster: debezium-connect
 spec:
@@ -23,7 +23,7 @@ spec:
   tasksMax: 1
   config: 
     # --- Ket noi MSSQL (in-cluster fixture, xem kafka/mssql-dev.yaml) ---
-    database.hostname: mssql.bnctl-kafka-development-ns.svc.cluster.local  
+    database.hostname: mssql.kafka-development-ns.svc.cluster.local  
     database.port: 1433 
     # Credentials KHONG inline — doc tu Secret mssql-credentials qua FileConfigProvider
     # (02-kafka-connect.yaml mount secret + khai config.providers.file; xem secret.example.yaml).

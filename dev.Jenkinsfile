@@ -7,9 +7,9 @@ pipeline {
     }
 
     environment {
-        NAMESPACE        = "bnctl-airflow-development-ns"
-        SPARK_NS         = "bnctl-spark2-development-ns"
-        KAFKA_NS         = "bnctl-kafka-development-ns"
+        NAMESPACE        = "airflow-development-ns"
+        SPARK_NS         = "spark2-development-ns"
+        KAFKA_NS         = "kafka-development-ns"
         IMAGE_REPO       = "haiptjits/dwh-test"
         IMAGE_TAG        = "airflow-build-${BUILD_NUMBER}"
         BUILD_JOB        = "build-airflow-image-${BUILD_NUMBER}"
@@ -93,7 +93,7 @@ spec:
               mkdir -p /root/.ssh
               cp /ssh-secret/gitSshKey /root/.ssh/id_rsa && chmod 600 /root/.ssh/id_rsa
               ssh-keyscan gitlab.com >> /root/.ssh/known_hosts
-              git clone --depth 1 -b ${BRANCH} git@gitlab.com:neonstudio/bnctl-data-warehouse/airflow_orchestration.git /workspace
+              git clone --depth 1 -b ${BRANCH} git@gitlab.com:neonstudio/data-warehouse/airflow_orchestration.git /workspace
           volumeMounts:
             - { name: workspace, mountPath: /workspace }
             - { name: ssh, mountPath: /ssh-secret, readOnly: true }
@@ -237,7 +237,7 @@ spec:
               mkdir -p /root/.ssh
               cp /ssh-secret/gitSshKey /root/.ssh/id_rsa && chmod 600 /root/.ssh/id_rsa
               ssh-keyscan gitlab.com >> /root/.ssh/known_hosts
-              git clone --depth 1 -b ${BRANCH} git@gitlab.com:neonstudio/bnctl-data-warehouse/airflow_orchestration.git /workspace
+              git clone --depth 1 -b ${BRANCH} git@gitlab.com:neonstudio/data-warehouse/airflow_orchestration.git /workspace
           volumeMounts:
             - { name: workspace, mountPath: /workspace }
             - { name: ssh, mountPath: /ssh-secret, readOnly: true }

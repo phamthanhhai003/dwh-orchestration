@@ -1,10 +1,10 @@
-# BNCTL DWH — Orchestration & Transformation
+# DWH — Orchestration & Transformation
 
 Pipeline dữ liệu **COB (Close of Business)** cho core banking Temenos T24: đưa dữ liệu từ MSSQL và
 SFTP vào Hive Iceberg, gate theo chu kỳ COB thật của T24, rồi build lên Silver data mart và Gold
 report phục vụ 5 nghiệp vụ — Accounting, Credit, AML, Operational, Treasury.
 
-> 📐 **[Tài liệu kiến trúc đầy đủ → `arch/BNCTL_DWH_System_Architecture.md`](arch/BNCTL_DWH_System_Architecture.md)**
+> 📐 **[Tài liệu kiến trúc đầy đủ → `arch/DWH_System_Architecture.md`](arch/DWH_System_Architecture.md)**
 >
 > 🏗️ Tầng hạ tầng K8s (Kafka/Strimzi, MinIO, Dremio, Hive Metastore, Airflow, Jenkins, ELK) ở repo
 > riêng: **[dwh-deployments](https://github.com/phamthanhhai003/dwh-deployments)**
@@ -225,7 +225,7 @@ psql -d cob_control -f scripts/cob_pipeline/01_postgres_control_tables.sql
 ## Known gaps
 
 Ghi thẳng để người đọc code không mất thời gian đi tìm — chi tiết ở
-[mục Known gaps của doc kiến trúc](arch/BNCTL_DWH_System_Architecture.md#known-gaps):
+[mục Known gaps của doc kiến trúc](arch/DWH_System_Architecture.md#known-gaps):
 
 - `scripts/sync/sftp_sync_spark.py` chưa có trong repo (chỉ tồn tại trong image đã build) → build
   image từ repo sạch thì `sftp_hold` không chạy được.

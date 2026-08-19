@@ -1,6 +1,6 @@
-# BNCTL DWH — System Architecture (COB Pipeline v1.4)
+# DWH — System Architecture (COB Pipeline v1.4)
 
-Tài liệu này mô tả kiến trúc tầng **orchestration + transformation** của Data Warehouse BNCTL:
+Tài liệu này mô tả kiến trúc tầng **orchestration + transformation** của Data Warehouse:
 dữ liệu T24 core banking đi từ MSSQL/SFTP vào Hive Iceberg, được gate theo chu kỳ COB
 (Close of Business), rồi build lên Silver data mart và Gold report.
 

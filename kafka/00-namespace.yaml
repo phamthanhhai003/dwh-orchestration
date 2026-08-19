@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: bnctl-kafka-development-ns
+  name: kafka-development-ns
   labels:
-    app.kubernetes.io/part-of: bnctl-cdc
+    app.kubernetes.io/part-of: cdc
     environment: development
